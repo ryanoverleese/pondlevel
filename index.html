@@ -14,6 +14,7 @@
       color: #1d1d1f;
       padding: 24px;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
     h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { font-size: 14px; color: #86868b; margin-bottom: 24px; }
@@ -110,7 +111,7 @@
     .event-table td { padding: 8px 8px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
     .event-table tr:last-child td { border-bottom: none; }
     .event-table td.ev-time  { color: #86868b; font-size: 12px; white-space: nowrap; }
-    .event-table td.ev-event { font-weight: 500; white-space: nowrap; }
+    .event-table td.ev-event { font-weight: 500; }
     .event-table td.ev-rate  { color: #86868b; font-size: 12px; text-align: right; white-space: nowrap; }
     .event-table td.ev-dur   { color: #86868b; font-size: 12px; text-align: right; white-space: nowrap; }
     .ev-up   { color: #2563eb; font-weight: 700; margin-right: 5px; }
@@ -195,6 +196,10 @@
 
     @media (max-width: 640px) {
       .grid { grid-template-columns: 1fr; }
+      .event-table, .pred-table { table-layout: fixed; }
+      .event-table td, .pred-table td { word-break: break-word; }
+      .event-table th:nth-child(3), .event-table td:nth-child(3),
+      .event-table th:nth-child(4), .event-table td:nth-child(4) { display: none; }
     }
   </style>
 </head>
