@@ -110,7 +110,7 @@
     .event-table td { padding: 8px 8px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
     .event-table tr:last-child td { border-bottom: none; }
     .event-table td.ev-time  { color: #86868b; font-size: 12px; white-space: nowrap; }
-    .event-table td.ev-event { font-weight: 500; }
+    .event-table td.ev-event { font-weight: 500; white-space: nowrap; }
     .event-table td.ev-rate  { color: #86868b; font-size: 12px; text-align: right; white-space: nowrap; }
     .event-table td.ev-dur   { color: #86868b; font-size: 12px; text-align: right; white-space: nowrap; }
     .ev-up   { color: #2563eb; font-weight: 700; margin-right: 5px; }
@@ -474,8 +474,8 @@
       let icon, label;
       if (ev.dir === "up")       { icon = `<span class="ev-up">↑</span>`;        label = `Rose past ${ev.depth}"`; }
       else if (ev.dir === "down"){ icon = `<span class="ev-down">↓</span>`;       label = `Dropped below ${ev.depth}"`; }
-      else if (ev.dir === "pump-on")  { icon = `<span class="ev-pump">⏻</span>`;      label = `Valve turned ON · ${ev.depth}" depth`; }
-      else                       { icon = `<span class="ev-pump-off">⏻</span>`;   label = `Valve turned OFF · ${ev.depth}" depth`; }
+      else if (ev.dir === "pump-on")  { icon = `<span class="ev-pump">⏻</span>`;      label = `Valve ON${ev.depth ? ` · ${ev.depth}"` : ""}`; }
+      else                       { icon = `<span class="ev-pump-off">⏻</span>`;   label = `Valve OFF${ev.depth ? ` · ${ev.depth}"` : ""}`; }
       html += `<tr>
         <td class="ev-time">${fmtTime(ev.ts)}</td>
         <td class="ev-event">${icon}${label}</td>
