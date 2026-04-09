@@ -158,6 +158,16 @@
     .pin-key.del { font-size: 16px; color: #86868b; }
     .pin-key.cancel { font-size: 14px; color: #ff3b30; background: #fff0f0; }
 
+    /* Valve status */
+    .valve-status { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px;
+      padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+    .valve-status.valve-on  { background: #dcfce7; color: #15803d; }
+    .valve-status.valve-off { background: #f5f5f7; color: #86868b; }
+    .valve-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .valve-on  .valve-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.25); animation: pulse 1.5s infinite; }
+    .valve-off .valve-dot { background: #86868b; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.25); } 50% { box-shadow: 0 0 0 6px rgba(34,197,94,0.1); } }
+
     /* Pump log */
     .pump-btns { display: flex; gap: 10px; }
     .pump-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: 15px;
@@ -593,6 +603,20 @@
       const eventLog    = renderEventLog(fillTimeline, current.waterDepth, rate, pump);
       const predictions = renderPredictions(history, current.waterDepth, rate, pump);
 
+      // Valve status
+      const pumpSortedMain = [...(pump || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+      const lastPumpEvent  = pumpSortedMain[pumpSortedMain.length - 1];
+      const valveIsOn      = lastPumpEvent?.action === "on";
+      const valveElapsed   = lastPumpEvent ? (Date.now() - new Date(lastPumpEvent.ts).getTime()) : null;
+      const valveHrs       = valveElapsed !== null ? valveElapsed / 3600000 : null;
+      const valveHrsStr    = valveHrs !== null ? fmtDuration(valveElapsed) : "unknown";
+      const valveStatusHtml = lastPumpEvent
+        ? `<div class="valve-status ${valveIsOn ? "valve-on" : "valve-off"}">
+             <span class="valve-dot"></span>
+             Valve ${valveIsOn ? "ON" : "OFF"} &nbsp;·&nbsp; ${valveHrsStr} on this cycle
+           </div>`
+        : "";
+
       const fetchedStr = fetched
         ? new Date(fetched).toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })
         : "unknown";
@@ -623,6 +647,7 @@
                 <div class="depth-value">${current.waterDepth}"</div>
                 <div class="depth-unit">water depth</div>
                 <div class="depth-sub">${(current.waterDepth / 12).toFixed(2)} ft &nbsp;·&nbsp; ${pct}% of ${MAX_DEPTH}" capacity</div>
+                ${valveStatusHtml}
               </div>
               <div class="stats">
                 <div class="stat">
