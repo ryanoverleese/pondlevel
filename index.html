@@ -613,28 +613,40 @@
           if (last) chartPoints.push({ ts: last.ts, waterDepth: last.waterDepth });
         }
 
-        // Pump annotations
+        // Pump shading — pair on/off events into shaded box annotations
         const pumpAnnotations = {};
-        (pump || []).filter(p => new Date(p.ts).getTime() >= cutoff).forEach((p, i) => {
-          const evTs = new Date(p.ts).getTime();
+        const pumpSorted = (pump || [])
+          .filter(p => new Date(p.ts).getTime() >= cutoff)
+          .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+        function nearestIdx(ts) {
           let closest = 0, minDiff = Infinity;
           chartPoints.forEach((pt, idx) => {
-            const diff = Math.abs(pt.ts - evTs);
+            const diff = Math.abs(pt.ts - ts);
             if (diff < minDiff) { minDiff = diff; closest = idx; }
           });
-          const isOn = p.action === "on";
-          pumpAnnotations[`pump${i}`] = {
-            type: "line", xMin: closest, xMax: closest,
-            borderColor: isOn ? "#34c759" : "#ff9500",
-            borderWidth: 2, borderDash: [4, 4],
+          return closest;
+        }
+
+        let boxIdx = 0;
+        for (let i = 0; i < pumpSorted.length; i++) {
+          if (pumpSorted[i].action !== "on") continue;
+          const onTs  = new Date(pumpSorted[i].ts).getTime();
+          const offEv = pumpSorted.slice(i + 1).find(p => p.action === "off");
+          const offTs = offEv ? new Date(offEv.ts).getTime() : chartPoints[chartPoints.length - 1]?.ts ?? Date.now();
+          pumpAnnotations[`valve${boxIdx++}`] = {
+            type: "box",
+            xMin: nearestIdx(onTs),
+            xMax: nearestIdx(offTs),
+            backgroundColor: "rgba(37,99,235,0.12)",
+            borderWidth: 0,
             label: {
-              content: isOn ? "Valve On" : "Valve Off", display: true, position: "start",
-              backgroundColor: isOn ? "#34c759" : "#ff9500", color: "#fff",
-              font: { size: 10, weight: "600" }, padding: { x: 5, y: 3 },
-              borderRadius: 4, yAdjust: 8,
+              content: "Valve On", display: true, position: { x: "start", y: "start" },
+              color: "#2563eb", font: { size: 10, weight: "600" },
+              padding: { x: 5, y: 3 },
             }
           };
-        });
+        }
 
         if (_chart) _chart.destroy();
         const ctx = document.getElementById("chart").getContext("2d");
