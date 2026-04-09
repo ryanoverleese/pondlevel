@@ -613,40 +613,26 @@
           if (last) chartPoints.push({ ts: last.ts, waterDepth: last.waterDepth });
         }
 
-        // Pump shading — pair on/off events into shaded box annotations
-        const pumpAnnotations = {};
+        // Build valve-on shading dataset — darker fill only under the line during on periods
         const pumpSorted = (pump || [])
-          .filter(p => new Date(p.ts).getTime() >= cutoff)
           .sort((a, b) => new Date(a.ts) - new Date(b.ts));
 
-        function nearestIdx(ts) {
-          let closest = 0, minDiff = Infinity;
-          chartPoints.forEach((pt, idx) => {
-            const diff = Math.abs(pt.ts - ts);
-            if (diff < minDiff) { minDiff = diff; closest = idx; }
-          });
-          return closest;
-        }
-
-        let boxIdx = 0;
+        // Build list of [onTs, offTs] ranges
+        const valveRanges = [];
         for (let i = 0; i < pumpSorted.length; i++) {
           if (pumpSorted[i].action !== "on") continue;
           const onTs  = new Date(pumpSorted[i].ts).getTime();
           const offEv = pumpSorted.slice(i + 1).find(p => p.action === "off");
-          const offTs = offEv ? new Date(offEv.ts).getTime() : chartPoints[chartPoints.length - 1]?.ts ?? Date.now();
-          pumpAnnotations[`valve${boxIdx++}`] = {
-            type: "box",
-            xMin: nearestIdx(onTs),
-            xMax: nearestIdx(offTs),
-            backgroundColor: "rgba(37,99,235,0.12)",
-            borderWidth: 0,
-            label: {
-              content: "Valve On", display: true, position: { x: "start", y: "start" },
-              color: "#2563eb", font: { size: 10, weight: "600" },
-              padding: { x: 5, y: 3 },
-            }
-          };
+          const offTs = offEv ? new Date(offEv.ts).getTime() : Infinity;
+          valveRanges.push([onTs, offTs]);
         }
+
+        function inValveRange(ts) {
+          return valveRanges.some(([on, off]) => ts >= on && ts <= off);
+        }
+
+        // Valve-on dataset: water depth when valve is on, null otherwise
+        const valveData = chartPoints.map(p => inValveRange(p.ts) ? p.waterDepth : null);
 
         if (_chart) _chart.destroy();
         const ctx = document.getElementById("chart").getContext("2d");
@@ -654,24 +640,37 @@
           type: "line",
           data: {
             labels: chartPoints.map(p => fmtTime(p.ts)),
-            datasets: [{
-              label: "Water Depth (in)",
-              data: chartPoints.map(p => p.waterDepth),
-              borderColor: "#2563eb",
-              backgroundColor: "rgba(37,99,235,0.08)",
-              borderWidth: 2,
-              pointRadius: 0,
-              pointHoverRadius: 4,
-              fill: true,
-              tension: range === "7d" ? 0.3 : 0,
-            }]
+            datasets: [
+              {
+                label: "Water Depth (in)",
+                data: chartPoints.map(p => p.waterDepth),
+                borderColor: "#2563eb",
+                backgroundColor: "rgba(37,99,235,0.07)",
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                fill: true,
+                tension: range === "7d" ? 0.3 : 0,
+              },
+              {
+                label: "Valve On",
+                data: valveData,
+                borderColor: "transparent",
+                backgroundColor: "rgba(37,99,235,0.22)",
+                borderWidth: 0,
+                pointRadius: 0,
+                fill: true,
+                tension: range === "7d" ? 0.3 : 0,
+                spanGaps: false,
+              }
+            ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
               legend: { display: false },
-              annotation: { annotations: pumpAnnotations }
+              annotation: {}
             },
             scales: {
               x: { ticks: { maxTicksLimit: 8, font: { size: 11 }, color: "#86868b" }, grid: { display: false } },
