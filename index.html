@@ -135,6 +135,17 @@
     .pred-na     { color: #c7c7cc; }
     .pred-basis  { font-size: 12px; color: #86868b; margin-bottom: 12px; }
 
+    /* Pump log */
+    .pump-btns { display: flex; gap: 10px; }
+    .pump-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: 15px;
+      font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .pump-btn:hover { opacity: 0.85; }
+    .pump-on  { background: #2563eb; color: #fff; }
+    .pump-off { background: #e5e5ea; color: #1d1d1f; }
+    .pump-confirm { font-size: 12px; color: #34c759; margin-top: 8px; min-height: 18px; }
+    .ev-pump { color: #34c759; font-weight: 700; margin-right: 5px; }
+    .ev-pump-off { color: #86868b; font-weight: 700; margin-right: 5px; }
+
     /* Loading / error */
     .loading { text-align: center; padding: 40px; color: #86868b; }
     .error { color: #ff3b30; font-size: 14px; padding: 16px 0; }
@@ -145,6 +156,13 @@
   </style>
 </head>
 <body>
+
+<!-- Hidden Netlify form for pump logging -->
+<form name="pump-log" netlify hidden>
+  <input name="action" />
+  <input name="ts" />
+  <input name="depth" />
+</form>
 
 <h1>Pond Level Monitor</h1>
 <p class="subtitle">G215091 · Pasture · Live from CropX</p>
@@ -165,7 +183,19 @@
     if (!resp.ok) throw new Error(`Could not load pond_data.json (${resp.status})`);
     const d = await resp.json();
     if (d.error) throw new Error(d.error);
-    return { sensors: d.sensors || [], history: d.history || [], fetched: d.fetched };
+    return { sensors: d.sensors || [], history: d.history || [], pump: d.pump || [], fetched: d.fetched };
+  }
+
+  async function logPump(action, currentDepth) {
+    const formData = new FormData();
+    formData.append("form-name", "pump-log");
+    formData.append("action", action);
+    formData.append("ts", new Date().toISOString());
+    formData.append("depth", currentDepth);
+    await fetch("/", { method: "POST", body: formData });
+    const confirm = document.getElementById("pump-confirm");
+    confirm.textContent = action === "on" ? "Pump ON logged ✓" : "Pump OFF logged ✓";
+    setTimeout(() => confirm.textContent = "", 3000);
   }
 
   function buildSensorTimelines(sensors) {
@@ -251,11 +281,14 @@
     return { tubeHtml };
   }
 
-  function renderEventLog(fillTimeline, currentDepth, rate) {
+  function renderEventLog(fillTimeline, currentDepth, rate, pumpEvents) {
     const events = [];
     for (const item of fillTimeline) {
       if (item.hitAt)   events.push({ ts: item.hitAt,   dir: "up",   depth: item.waterDepth });
       if (item.driedAt) events.push({ ts: item.driedAt, dir: "down", depth: item.waterDepth });
+    }
+    for (const p of (pumpEvents || [])) {
+      events.push({ ts: new Date(p.ts).getTime(), dir: p.action === "on" ? "pump-on" : "pump-off", depth: p.depth });
     }
     events.sort((a, b) => b.ts - a.ts);
 
@@ -292,8 +325,11 @@
         durCell = fmtDuration(gap);
         rateCell = inches > 0 ? `${(inches / (gap / 3600000)).toFixed(1)} in/hr` : "—";
       }
-      const icon  = ev.dir === "up" ? `<span class="ev-up">↑</span>` : `<span class="ev-down">↓</span>`;
-      const label = ev.dir === "up" ? `Rose past ${ev.depth}"` : `Dropped below ${ev.depth}"`;
+      let icon, label;
+      if (ev.dir === "up")       { icon = `<span class="ev-up">↑</span>`;        label = `Rose past ${ev.depth}"`; }
+      else if (ev.dir === "down"){ icon = `<span class="ev-down">↓</span>`;       label = `Dropped below ${ev.depth}"`; }
+      else if (ev.dir === "pump-on")  { icon = `<span class="ev-pump">⏻</span>`;      label = `Pump turned ON · ${ev.depth}" depth`; }
+      else                       { icon = `<span class="ev-pump-off">⏻</span>`;   label = `Pump turned OFF · ${ev.depth}" depth`; }
       html += `<tr>
         <td class="ev-time">${fmtTime(ev.ts)}</td>
         <td class="ev-event">${icon}${label}</td>
@@ -406,7 +442,7 @@
   async function main() {
     const app = document.getElementById("app");
     try {
-      const { sensors, history, fetched } = await getData();
+      const { sensors, history, pump, fetched } = await getData();
       if (!sensors.length) { app.innerHTML = `<div class="error">No sensor data.</div>`; return; }
 
       const sensorTimelines = buildSensorTimelines(sensors);
@@ -429,7 +465,7 @@
       const rate48Cls = rate48 === null ? "flat" : rate48 > 0.05 ? "up" : rate48 < -0.05 ? "down" : "flat";
 
       const { tubeHtml } = renderProbe(sensorTimelines);
-      const eventLog   = renderEventLog(fillTimeline, current.waterDepth, rate);
+      const eventLog    = renderEventLog(fillTimeline, current.waterDepth, rate, pump);
       const predictions = renderPredictions(history, current.waterDepth, rate);
 
       const fetchedStr = fetched
@@ -444,6 +480,14 @@
               <div class="probe-wrap">
                 <div class="probe-tube">${tubeHtml}</div>
               </div>
+            </div>
+            <div class="card">
+              <h2>Pump Log</h2>
+              <div class="pump-btns">
+                <button class="pump-btn pump-on" onclick="logPump('on', ${current.waterDepth})">Pump On</button>
+                <button class="pump-btn pump-off" onclick="logPump('off', ${current.waterDepth})">Pump Off</button>
+              </div>
+              <div class="pump-confirm" id="pump-confirm"></div>
             </div>
           </div>
 
