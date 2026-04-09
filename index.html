@@ -235,8 +235,7 @@
       renderPumpLock();
       return;
     }
-    // Show PIN keypad modal
-    let entered = "";
+    // Show PIN modal with hidden tel input to trigger iOS numeric keyboard
     const overlay = document.createElement("div");
     overlay.className = "pin-overlay";
     overlay.innerHTML = `
@@ -248,45 +247,40 @@
           <div class="pin-dot" id="pd2"></div>
           <div class="pin-dot" id="pd3"></div>
         </div>
-        <div class="pin-grid">
-          ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="pin-key" onclick="pinKey('${n}')">${n}</button>`).join("")}
-          <button class="pin-key cancel" onclick="pinCancel()">Cancel</button>
-          <button class="pin-key" onclick="pinKey('0')">0</button>
-          <button class="pin-key del" onclick="pinDel()">⌫</button>
-        </div>
+        <input id="pin-input" type="tel" inputmode="numeric" pattern="[0-9]*"
+          maxlength="4" autocomplete="off"
+          style="position:absolute;opacity:0;width:1px;height:1px;top:0;left:0;" />
+        <button class="pin-key cancel" style="width:100%;margin-top:16px;" onclick="pinCancel()">Cancel</button>
       </div>
     `;
     document.body.appendChild(overlay);
 
-    window.pinKey = function(k) {
-      if (entered.length >= 4) return;
-      entered += k;
-      document.getElementById(`pd${entered.length - 1}`).classList.add("filled");
-      if (entered.length === 4) {
+    const input = document.getElementById("pin-input");
+    input.focus();
+
+    input.addEventListener("input", () => {
+      const val = input.value.replace(/\D/g, "").slice(0, 4);
+      input.value = val;
+      // Update dots
+      for (let i = 0; i < 4; i++) {
+        document.getElementById(`pd${i}`).classList.toggle("filled", i < val.length);
+        document.getElementById(`pd${i}`).style.borderColor = "";
+      }
+      if (val.length === 4) {
         setTimeout(() => {
-          if (entered === PUMP_PIN) {
+          if (val === PUMP_PIN) {
             localStorage.setItem("pump_auth", PUMP_PIN);
             renderPumpLock();
             document.body.removeChild(overlay);
           } else {
-            // Shake and reset
             document.querySelectorAll(".pin-dot").forEach(d => { d.classList.remove("filled"); d.style.borderColor = "#ff3b30"; });
-            setTimeout(() => {
-              document.querySelectorAll(".pin-dot").forEach(d => d.style.borderColor = "");
-              entered = "";
-            }, 600);
+            setTimeout(() => { input.value = ""; document.querySelectorAll(".pin-dot").forEach(d => d.style.borderColor = ""); }, 600);
           }
         }, 150);
       }
-    };
-    window.pinDel = function() {
-      if (!entered.length) return;
-      document.getElementById(`pd${entered.length - 1}`).classList.remove("filled");
-      entered = entered.slice(0, -1);
-    };
-    window.pinCancel = function() {
-      document.body.removeChild(overlay);
-    };
+    });
+
+    window.pinCancel = function() { document.body.removeChild(overlay); };
   }
 
   async function logPump(action, currentDepth) {
