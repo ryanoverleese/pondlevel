@@ -157,7 +157,7 @@
   const DEPTH_OFFSET   = 44;
   const MAX_DEPTH      = 42;
   const WET_THRESHOLD  = 15;
-  const HOURS = 48;
+  const HOURS = 168;
   const SENSOR_DEPTHS_FROM_TOP = [34, 30, 26, 22, 18, 14, 10, 6, 2];
 
   async function getData() {
@@ -480,7 +480,7 @@
             </div>
 
             <div class="card">
-              <h2>Water Level — Last ${HOURS} Hours</h2>
+              <h2>Water Level — Last 7 Days</h2>
               <div class="chart-wrap"><canvas id="chart"></canvas></div>
               <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)}</div>
             </div>
