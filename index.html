@@ -399,25 +399,47 @@
 
   // ── Predictions ─────────────────────────────────────────────────────────────
 
-  function renderPredictions(historyEvents, currentDepth, rate) {
+  function renderPredictions(historyEvents, currentDepth, rate, pumpEvents) {
     const DEPTHS = SENSOR_DEPTHS_FROM_TOP.map(d => DEPTH_OFFSET - d).sort((a, b) => a - b);
     const targets = DEPTHS.filter(d => d !== currentDepth);
 
-    const sorted = [...historyEvents].sort((a, b) => a.ts - b.ts);
-    const rateMap = {};
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1], curr = sorted[i];
-      const dDepth = curr.depth - prev.depth;
-      const dHrs   = (curr.ts - prev.ts) / 3600000;
-      if (dHrs > 0 && dHrs < 72) {
-        const key = `${prev.depth}:${curr.depth}`;
-        if (!rateMap[key]) rateMap[key] = [];
-        rateMap[key].push(Math.abs(dDepth) / dHrs);
-      }
+    // Build valve-on ranges from pump events
+    const pumpSorted = [...(pumpEvents || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const valveRanges = [];
+    for (let i = 0; i < pumpSorted.length; i++) {
+      if (pumpSorted[i].action !== "on") continue;
+      const onTs  = new Date(pumpSorted[i].ts).getTime();
+      const offEv = pumpSorted.slice(i + 1).find(p => p.action === "off");
+      const offTs = offEv ? new Date(offEv.ts).getTime() : Infinity;
+      valveRanges.push([onTs, offTs]);
+    }
+    function isValveOn(ts) {
+      return valveRanges.some(([on, off]) => ts >= on && ts <= off);
     }
 
-    function avgRate(from, to) {
-      const arr = rateMap[`${from}:${to}`] || [];
+    // Split history crossings into valve-on vs natural buckets
+    function buildRateMap(events) {
+      const map = {};
+      const sorted = [...events].sort((a, b) => a.ts - b.ts);
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = sorted[i - 1], curr = sorted[i];
+        const dHrs = (curr.ts - prev.ts) / 3600000;
+        if (dHrs > 0 && dHrs < 72) {
+          const key = `${prev.depth}:${curr.depth}`;
+          if (!map[key]) map[key] = [];
+          map[key].push(Math.abs(curr.depth - prev.depth) / dHrs);
+        }
+      }
+      return map;
+    }
+
+    const valveEvents   = historyEvents.filter(e => isValveOn(e.ts));
+    const naturalEvents = historyEvents.filter(e => !isValveOn(e.ts));
+    const valveRateMap   = buildRateMap(valveEvents);
+    const naturalRateMap = buildRateMap(naturalEvents);
+
+    function avgRate(map, from, to) {
+      const arr = map[`${from}:${to}`] || [];
       if (!arr.length) return null;
       return arr.reduce((s, v) => s + v, 0) / arr.length;
     }
@@ -428,9 +450,10 @@
       return eta.toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
     }
 
-    const rising   = rate !== null && rate > 0.05;
-    const draining = rate !== null && rate < -0.05;
+    const rising    = rate !== null && rate > 0.05;
+    const draining  = rate !== null && rate < -0.05;
     const direction = rising ? "up" : draining ? "down" : null;
+    const valveNow  = isValveOn(Date.now());
 
     const filteredTargets = direction === "up"
       ? targets.filter(d => d > currentDepth)
@@ -442,26 +465,30 @@
       return `<div class="pred-basis">No active fill or drain detected. Predictions will appear once water is moving.</div>`;
     }
 
+    const modeLabel = valveNow ? "Valve On" : "Natural";
+    const histRateMap = valveNow ? valveRateMap : naturalRateMap;
+    const histCycles  = valveNow ? valveEvents.length : naturalEvents.length;
+
     let html = direction
-      ? `<div class="pred-basis">${rising ? "Filling" : "Draining"} at ${rate > 0 ? "+" : ""}${rate.toFixed(2)}"/hr (12-hr avg). Estimates based on current rate and historical averages.</div>`
-      : `<div class="pred-basis">Water is stable. Showing historical rates for reference.</div>`;
+      ? `<div class="pred-basis">${rising ? "Filling" : "Draining"} at ${rate > 0 ? "+" : ""}${rate.toFixed(2)}"/hr (12-hr avg) · <strong>${modeLabel}</strong> · ${histCycles} crossing${histCycles !== 1 ? "s" : ""} in history</div>`
+      : `<div class="pred-basis">Water stable · <strong>${modeLabel}</strong> · ${histCycles} crossing${histCycles !== 1 ? "s" : ""} in history</div>`;
 
     html += `<table class="pred-table">
       <thead><tr>
         <th>Target Depth</th>
         <th>At Current Rate</th>
-        <th>Hist. Avg Rate</th>
-        <th>Hist. Avg ETA</th>
+        <th>${modeLabel} Hist. Rate</th>
+        <th>${modeLabel} ETA</th>
       </tr></thead><tbody>`;
 
     for (const target of filteredTargets.sort((a, b) => direction === "down" ? b - a : a - b)) {
-      const diff   = target - currentDepth;
-      const needed = Math.abs(diff);
+      const diff    = target - currentDepth;
+      const needed  = Math.abs(diff);
       let curEtaHrs = null;
       if (direction === "up"   && diff > 0 && rate > 0) curEtaHrs = diff / rate;
       if (direction === "down" && diff < 0 && rate < 0) curEtaHrs = diff / rate;
 
-      const hRate = avgRate(currentDepth, target);
+      const hRate    = avgRate(histRateMap, currentDepth, target);
       const hRateStr = hRate !== null ? `${hRate.toFixed(2)}" /hr avg` : "No history yet";
       const hEta     = hRate !== null ? (fmtEta(needed / hRate) || "—") : "—";
 
@@ -509,7 +536,7 @@
 
       const { tubeHtml } = renderProbe(sensorTimelines);
       const eventLog    = renderEventLog(fillTimeline, current.waterDepth, rate, pump);
-      const predictions = renderPredictions(history, current.waterDepth, rate);
+      const predictions = renderPredictions(history, current.waterDepth, rate, pump);
 
       const fetchedStr = fetched
         ? new Date(fetched).toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })
