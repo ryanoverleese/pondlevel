@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Pond Level Monitor — G215091</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -567,11 +568,42 @@
         </div>
       `;
 
+      // Build pump annotations — find nearest chart label index for each event
+      const chartLabels = points.map(p => fmtTime(p.ts));
+      const pumpAnnotations = {};
+      (pump || []).forEach((p, i) => {
+        const evTs = new Date(p.ts).getTime();
+        let closest = 0, minDiff = Infinity;
+        points.forEach((pt, idx) => {
+          const diff = Math.abs(pt.ts - evTs);
+          if (diff < minDiff) { minDiff = diff; closest = idx; }
+        });
+        const isOn = p.action === "on";
+        pumpAnnotations[`pump${i}`] = {
+          type: "line",
+          xMin: closest, xMax: closest,
+          borderColor: isOn ? "#34c759" : "#ff9500",
+          borderWidth: 2,
+          borderDash: [4, 4],
+          label: {
+            content: isOn ? "Valve On" : "Valve Off",
+            display: true,
+            position: "start",
+            backgroundColor: isOn ? "#34c759" : "#ff9500",
+            color: "#fff",
+            font: { size: 10, weight: "600" },
+            padding: { x: 5, y: 3 },
+            borderRadius: 4,
+            yAdjust: 8,
+          }
+        };
+      });
+
       const ctx = document.getElementById("chart").getContext("2d");
       new Chart(ctx, {
         type: "line",
         data: {
-          labels: points.map(p => fmtTime(p.ts)),
+          labels: chartLabels,
           datasets: [{
             label: "Water Depth (in)",
             data: points.map(p => p.waterDepth),
@@ -587,7 +619,10 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          plugins: {
+            legend: { display: false },
+            annotation: { annotations: pumpAnnotations }
+          },
           scales: {
             x: { ticks: { maxTicksLimit: 8, font: { size: 11 }, color: "#86868b" }, grid: { display: false } },
             y: {
