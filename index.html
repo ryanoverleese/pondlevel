@@ -245,21 +245,10 @@
       const readings = sensorTimelines[d] || [];
       const vwc = readings.length ? readings[readings.length - 1].vwc : 0;
       const waterDepth = DEPTH_OFFSET - d;
-      const isSed = d >= 30;
-      let cls, lblCls, lbl;
-      if (vwc >= WET_THRESHOLD) {
-        cls = isSed ? "sediment" : "wet";
-        lblCls = isSed ? "probe-label sediment-lbl" : "probe-label wet";
-        lbl = `water`;
-      } else {
-        cls = "dry";
-        lblCls = "probe-label";
-        lbl = `air`;
-      }
+      const cls = vwc >= WET_THRESHOLD ? "wet" : "dry";
       tubeHtml += `<div class="probe-sensor ${cls}" title="${d}&quot; from top — ${vwc.toFixed(1)}%">${waterDepth}"</div>`;
-      labelHtml += `<div class="${lblCls}">${lbl}</div>`;
     }
-    return { tubeHtml, labelHtml };
+    return { tubeHtml };
   }
 
   function renderEventLog(fillTimeline, currentDepth, rate) {
@@ -439,7 +428,7 @@
         : "Stable";
       const rate48Cls = rate48 === null ? "flat" : rate48 > 0.05 ? "up" : rate48 < -0.05 ? "down" : "flat";
 
-      const { tubeHtml, labelHtml } = renderProbe(sensorTimelines);
+      const { tubeHtml } = renderProbe(sensorTimelines);
       const eventLog   = renderEventLog(fillTimeline, current.waterDepth, rate);
       const predictions = renderPredictions(history, current.waterDepth, rate);
 
@@ -454,7 +443,6 @@
               <h2>Depth View</h2>
               <div class="probe-wrap">
                 <div class="probe-tube">${tubeHtml}</div>
-                <div class="probe-labels">${labelHtml}</div>
               </div>
             </div>
           </div>
