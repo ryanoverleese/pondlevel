@@ -236,14 +236,31 @@
   }
 
   function renderPumpLock() {
-    const btns = document.querySelectorAll(".pump-btn");
+    const onBtn  = document.querySelector(".pump-on");
+    const offBtn = document.querySelector(".pump-off");
     const lockEl = document.getElementById("pump-lock");
     if (isUnlocked()) {
-      btns.forEach(b => b.disabled = false);
+      if (onBtn)  onBtn.disabled  = false;
+      if (offBtn) offBtn.disabled = false;
       if (lockEl) lockEl.textContent = "Locked? Click to lock.";
     } else {
-      btns.forEach(b => b.disabled = true);
+      if (onBtn)  onBtn.disabled  = true;
+      if (offBtn) offBtn.disabled = true;
       if (lockEl) lockEl.textContent = "🔒 Tap to unlock";
+    }
+    refreshValveBtns();
+  }
+
+  function refreshValveBtns() {
+    const onBtn  = document.querySelector(".pump-on");
+    const offBtn = document.querySelector(".pump-off");
+    if (!onBtn || !offBtn) return;
+    if (window._valveOn) {
+      onBtn.style.background  = "#e5e5ea"; onBtn.style.color  = "#86868b";
+      offBtn.style.background = "#ef4444"; offBtn.style.color = "#fff";
+    } else {
+      onBtn.style.background  = "#2563eb"; onBtn.style.color  = "#fff";
+      offBtn.style.background = "#e5e5ea"; offBtn.style.color = "#1d1d1f";
     }
   }
 
@@ -320,6 +337,8 @@
     formData.append("ts", new Date().toISOString());
     formData.append("depth", currentDepth);
     await fetch("/", { method: "POST", body: formData });
+    window._valveOn = action === "on";
+    refreshValveBtns();
     const confirm = document.getElementById("pump-confirm");
     confirm.textContent = action === "on" ? "Valve ON logged ✓" : "Valve OFF logged ✓";
     setTimeout(() => confirm.textContent = "", 3000);
@@ -823,6 +842,7 @@
         buildChart(range);
       };
 
+      window._valveOn = valveIsOn;
       buildChart("7d");
       renderPumpLock();
 
