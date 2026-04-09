@@ -216,7 +216,7 @@
 
   function fillRate(points) {
     const now = Date.now();
-    const recent = points.filter(p => p.ts > now - 3 * 3600 * 1000);
+    const recent = points.filter(p => p.ts > now - 12 * 3600 * 1000);
     if (recent.length < 2) return null;
     const first = recent[0], last = recent[recent.length - 1];
     const hrs = (last.ts - first.ts) / 3600000;
@@ -375,7 +375,7 @@
     }
 
     let html = direction
-      ? `<div class="pred-basis">${rising ? "Filling" : "Draining"} at ${rate > 0 ? "+" : ""}${rate.toFixed(2)}"/hr (3-hr avg). Estimates based on current rate and historical averages.</div>`
+      ? `<div class="pred-basis">${rising ? "Filling" : "Draining"} at ${rate > 0 ? "+" : ""}${rate.toFixed(2)}"/hr (12-hr avg). Estimates based on current rate and historical averages.</div>`
       : `<div class="pred-basis">Water is stable. Showing historical rates for reference.</div>`;
 
     html += `<table class="pred-table">
@@ -462,7 +462,7 @@
               <div class="stats">
                 <div class="stat">
                   <div class="stat-val ${rateCls}">${rateStr}</div>
-                  <div class="stat-lbl">Fill Rate (3 hr)</div>
+                  <div class="stat-lbl">Fill Rate (12 hr)</div>
                 </div>
                 <div class="stat">
                   <div class="stat-val">${MAX_DEPTH}"</div>
