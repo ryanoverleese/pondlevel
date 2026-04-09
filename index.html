@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pond Level Monitor — G215091</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: #86868b; margin-bottom: 24px; }
+
+    .grid { display: grid; grid-template-columns: 240px 1fr; gap: 16px; align-items: start; }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #86868b; margin-bottom: 14px; }
+
+    /* Big depth number */
+    .depth-display {
+      text-align: center;
+      padding: 8px 0 16px;
+      border-bottom: 1px solid #f0f0f0;
+      margin-bottom: 16px;
+    }
+    .depth-value { font-size: 72px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+    .depth-unit { font-size: 18px; font-weight: 500; color: #86868b; margin-top: 4px; }
+    .depth-sub { font-size: 13px; color: #86868b; margin-top: 6px; }
+
+    /* Stats row */
+    .stats { display: flex; gap: 0; }
+    .stat { flex: 1; text-align: center; padding: 0 8px; }
+    .stat + .stat { border-left: 1px solid #f0f0f0; }
+    .stat-val { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+    .stat-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: #86868b; margin-top: 3px; }
+    .up { color: #34c759; }
+    .down { color: #ff9500; }
+    .flat { color: #86868b; }
+
+    /* Probe diagram */
+    .probe-wrap { display: flex; justify-content: center; padding: 8px 0; }
+    .probe-tube {
+      width: 44px;
+      border-radius: 22px;
+      overflow: hidden;
+      border: 2px solid #d2d2d7;
+      background: #f5f5f7;
+      position: relative;
+    }
+    .probe-sensor {
+      width: 100%;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      transition: background 0.4s;
+    }
+    .probe-sensor.wet      { background: #2563eb; color: #fff; }
+    .probe-sensor.sediment { background: #60a5fa; color: #fff; }
+    .probe-sensor.dry      { background: #e5e5ea; color: #86868b; }
+    .probe-labels {
+      display: flex;
+      flex-direction: column;
+      margin-left: 10px;
+      justify-content: space-around;
+    }
+    .probe-label {
+      height: 28px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      color: #3a3a3f;
+      white-space: nowrap;
+    }
+    .probe-label.wet          { font-weight: 600; color: #2563eb; }
+    .probe-label.sediment-lbl { font-weight: 600; color: #60a5fa; }
+
+    /* Event log table */
+    .event-current {
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 12px 8px 14px;
+      border-bottom: 2px solid #e5e5ea;
+      margin-bottom: 4px;
+    }
+    .event-current-depth { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; color: #1d1d1f; }
+    .event-current-label { font-size: 13px; color: #86868b; }
+    .event-current-rate  { font-size: 13px; font-weight: 600; margin-left: auto; }
+
+    .event-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .event-table th { text-align: left; padding: 4px 8px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em; color: #86868b;
+      border-bottom: 1px solid #f0f0f0; }
+    .event-table td { padding: 8px 8px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
+    .event-table tr:last-child td { border-bottom: none; }
+    .event-table td.ev-time  { color: #86868b; font-size: 12px; white-space: nowrap; }
+    .event-table td.ev-event { font-weight: 500; }
+    .event-table td.ev-rate  { color: #86868b; font-size: 12px; text-align: right; white-space: nowrap; }
+    .event-table td.ev-dur   { color: #86868b; font-size: 12px; text-align: right; white-space: nowrap; }
+    .ev-up   { color: #2563eb; font-weight: 700; margin-right: 5px; }
+    .ev-down { color: #ff9500; font-weight: 700; margin-right: 5px; }
+    .ev-pre  { color: #c7c7cc; }
+
+    /* Chart */
+    .chart-wrap { position: relative; height: 220px; }
+
+    /* Last updated */
+    .updated { font-size: 12px; color: #86868b; margin-top: 8px; }
+
+    /* Predictions */
+    .pred-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pred-table th { text-align: left; padding: 4px 8px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em; color: #86868b;
+      border-bottom: 1px solid #f0f0f0; }
+    .pred-table td { padding: 8px 8px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
+    .pred-table tr:last-child td { border-bottom: none; }
+    .pred-target { font-weight: 600; color: #1d1d1f; }
+    .pred-est    { font-weight: 500; color: #2563eb; }
+    .pred-hist   { color: #86868b; font-size: 12px; }
+    .pred-na     { color: #c7c7cc; }
+    .pred-basis  { font-size: 12px; color: #86868b; margin-bottom: 12px; }
+
+    /* Loading / error */
+    .loading { text-align: center; padding: 40px; color: #86868b; }
+    .error { color: #ff3b30; font-size: 14px; padding: 16px 0; }
+
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Pond Level Monitor</h1>
+<p class="subtitle">G215091 · Pasture · Live from CropX</p>
+
+<div id="app">
+  <div class="loading">Loading sensor data...</div>
+</div>
+
+<script>
+  const DEPTH_OFFSET   = 44;
+  const MAX_DEPTH      = 42;
+  const WET_THRESHOLD  = 15;
+  const HOURS = 48;
+  const SENSOR_DEPTHS_FROM_TOP = [34, 30, 26, 22, 18, 14, 10, 6, 2];
+
+  async function getData() {
+    const resp = await fetch("./pond_data.json");
+    if (!resp.ok) throw new Error(`Could not load pond_data.json (${resp.status})`);
+    const d = await resp.json();
+    if (d.error) throw new Error(d.error);
+    return { sensors: d.sensors || [], history: d.history || [], fetched: d.fetched };
+  }
+
+  function buildSensorTimelines(sensors) {
+    const tl = {};
+    for (const s of sensors) {
+      const d = s.metaData.depth.value;
+      tl[d] = s.timestamps.map((ts, i) => ({ ts, vwc: s.values[i] ?? 0 }))
+                           .sort((a, b) => a.ts - b.ts);
+    }
+    return tl;
+  }
+
+  function computeWaterDepthTimeline(sensors) {
+    const timeline = {};
+    for (const s of sensors) {
+      const depth = s.metaData.depth.value;
+      s.timestamps.forEach((ts, i) => {
+        if (!timeline[ts]) timeline[ts] = {};
+        timeline[ts][depth] = s.values[i] ?? 0;
+      });
+    }
+    return Object.entries(timeline)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([ts, readings]) => {
+        let waterlineSensor = null;
+        for (const d of SENSOR_DEPTHS_FROM_TOP.slice().reverse()) {
+          if (readings[d] >= WET_THRESHOLD) { waterlineSensor = d; break; }
+        }
+        const wd = waterlineSensor !== null ? DEPTH_OFFSET - waterlineSensor : 0;
+        return { ts: Number(ts), waterDepth: Math.max(0, wd) };
+      });
+  }
+
+  function computeFillTimeline(sensorTimelines) {
+    return SENSOR_DEPTHS_FROM_TOP.map(d => {
+      const readings = sensorTimelines[d] || [];
+      const waterDepth = DEPTH_OFFSET - d;
+      const hitIdx = readings.findIndex(r => r.vwc >= WET_THRESHOLD);
+      const hitAt = hitIdx >= 0 ? readings[hitIdx].ts : null;
+      let driedAt = null;
+      if (hitIdx >= 0) {
+        const dr = readings.slice(hitIdx + 1).find(r => r.vwc < WET_THRESHOLD);
+        driedAt = dr ? dr.ts : null;
+      }
+      return { depthFromTop: d, waterDepth, hitAt, driedAt };
+    });
+  }
+
+  function fillRate(points) {
+    const now = Date.now();
+    const recent = points.filter(p => p.ts > now - 3 * 3600 * 1000);
+    if (recent.length < 2) return null;
+    const first = recent[0], last = recent[recent.length - 1];
+    const hrs = (last.ts - first.ts) / 3600000;
+    if (hrs < 0.05) return null;
+    return (last.waterDepth - first.waterDepth) / hrs;
+  }
+
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleString("en-US", {
+      month: "numeric", day: "numeric",
+      hour: "numeric", minute: "2-digit"
+    });
+  }
+
+  function fmtDuration(ms) {
+    const totalMin = Math.round(ms / 60000);
+    if (totalMin < 60) return `${totalMin} min`;
+    const h = Math.floor(totalMin / 60), m = totalMin % 60;
+    return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+  }
+
+  function renderProbe(sensorTimelines) {
+    let tubeHtml = "", labelHtml = "";
+    const ordered = [...SENSOR_DEPTHS_FROM_TOP].reverse();
+    for (const d of ordered) {
+      const readings = sensorTimelines[d] || [];
+      const vwc = readings.length ? readings[readings.length - 1].vwc : 0;
+      const waterDepth = DEPTH_OFFSET - d;
+      const isSed = d >= 30;
+      let cls, lblCls, lbl;
+      if (vwc >= WET_THRESHOLD) {
+        cls = isSed ? "sediment" : "wet";
+        lblCls = isSed ? "probe-label sediment-lbl" : "probe-label wet";
+        lbl = `${waterDepth}" water · ${Math.round(vwc)}%`;
+      } else {
+        cls = "dry";
+        lblCls = "probe-label";
+        lbl = `${waterDepth}" water · air`;
+      }
+      tubeHtml += `<div class="probe-sensor ${cls}" title="${d}&quot; from top — ${vwc.toFixed(1)}%">${waterDepth}"</div>`;
+      labelHtml += `<div class="${lblCls}">${lbl}</div>`;
+    }
+    return { tubeHtml, labelHtml };
+  }
+
+  function renderEventLog(fillTimeline, currentDepth, rate) {
+    const events = [];
+    for (const item of fillTimeline) {
+      if (item.hitAt)   events.push({ ts: item.hitAt,   dir: "up",   depth: item.waterDepth });
+      if (item.driedAt) events.push({ ts: item.driedAt, dir: "down", depth: item.waterDepth });
+    }
+    events.sort((a, b) => b.ts - a.ts);
+
+    const rateStr = rate === null ? "Stable"
+      : rate > 0.05  ? `+${rate.toFixed(1)}" /hr`
+      : rate < -0.05 ? `${rate.toFixed(1)}" /hr`
+      : "Stable";
+    const rateColor = rate === null ? "#86868b"
+      : rate > 0.05 ? "#2563eb" : rate < -0.05 ? "#ff9500" : "#86868b";
+
+    let html = `
+      <div class="event-current">
+        <div class="event-current-depth">${currentDepth}"</div>
+        <div class="event-current-label">current depth &nbsp;·&nbsp; ${(currentDepth/12).toFixed(2)} ft</div>
+        <div class="event-current-rate" style="color:${rateColor}">${rateStr}</div>
+      </div>
+      <table class="event-table">
+        <thead><tr>
+          <th>Time</th>
+          <th>Event</th>
+          <th style="text-align:right">Duration</th>
+          <th style="text-align:right">Rate</th>
+        </tr></thead>
+        <tbody>
+    `;
+
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      const next = events[i + 1];
+      let durCell = "—", rateCell = "—";
+      if (next) {
+        const gap = ev.ts - next.ts;
+        const inches = Math.abs(ev.depth - next.depth);
+        durCell = fmtDuration(gap);
+        rateCell = inches > 0 ? `${(inches / (gap / 3600000)).toFixed(1)} in/hr` : "—";
+      }
+      const icon  = ev.dir === "up" ? `<span class="ev-up">↑</span>` : `<span class="ev-down">↓</span>`;
+      const label = ev.dir === "up" ? `Rose past ${ev.depth}"` : `Dropped below ${ev.depth}"`;
+      html += `<tr>
+        <td class="ev-time">${fmtTime(ev.ts)}</td>
+        <td class="ev-event">${icon}${label}</td>
+        <td class="ev-dur">${durCell}</td>
+        <td class="ev-rate">${rateCell}</td>
+      </tr>`;
+    }
+
+    const preData = fillTimeline.filter(x => !x.hitAt && !x.driedAt);
+    if (preData.length) {
+      for (const item of preData) {
+        html += `<tr>
+          <td class="ev-time ev-pre">pre-data</td>
+          <td class="ev-event ev-pre"><span class="ev-up">↑</span>Rose past ${item.waterDepth}"</td>
+          <td class="ev-dur ev-pre">—</td>
+          <td class="ev-rate ev-pre">—</td>
+        </tr>`;
+      }
+    }
+
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  // ── Predictions ─────────────────────────────────────────────────────────────
+
+  function renderPredictions(historyEvents, currentDepth, rate) {
+    const DEPTHS = SENSOR_DEPTHS_FROM_TOP.map(d => DEPTH_OFFSET - d).sort((a, b) => a - b);
+    const targets = DEPTHS.filter(d => d !== currentDepth);
+
+    const sorted = [...historyEvents].sort((a, b) => a.ts - b.ts);
+    const rateMap = {};
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1], curr = sorted[i];
+      const dDepth = curr.depth - prev.depth;
+      const dHrs   = (curr.ts - prev.ts) / 3600000;
+      if (dHrs > 0 && dHrs < 72) {
+        const key = `${prev.depth}:${curr.depth}`;
+        if (!rateMap[key]) rateMap[key] = [];
+        rateMap[key].push(Math.abs(dDepth) / dHrs);
+      }
+    }
+
+    function avgRate(from, to) {
+      const arr = rateMap[`${from}:${to}`] || [];
+      if (!arr.length) return null;
+      return arr.reduce((s, v) => s + v, 0) / arr.length;
+    }
+
+    function fmtEta(hours) {
+      if (hours < 0 || hours > 999) return null;
+      const eta = new Date(Date.now() + hours * 3600000);
+      return eta.toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+
+    const rising   = rate !== null && rate > 0.05;
+    const draining = rate !== null && rate < -0.05;
+    const direction = rising ? "up" : draining ? "down" : null;
+
+    const filteredTargets = direction === "up"
+      ? targets.filter(d => d > currentDepth)
+      : direction === "down"
+        ? targets.filter(d => d < currentDepth)
+        : targets.filter(d => d !== currentDepth);
+
+    if (!filteredTargets.length && !direction) {
+      return `<div class="pred-basis">No active fill or drain detected. Predictions will appear once water is moving.</div>`;
+    }
+
+    let html = direction
+      ? `<div class="pred-basis">${rising ? "Filling" : "Draining"} at ${rate > 0 ? "+" : ""}${rate.toFixed(2)}"/hr (3-hr avg). Estimates based on current rate and historical averages.</div>`
+      : `<div class="pred-basis">Water is stable. Showing historical rates for reference.</div>`;
+
+    html += `<table class="pred-table">
+      <thead><tr>
+        <th>Target Depth</th>
+        <th>At Current Rate</th>
+        <th>Hist. Avg Rate</th>
+        <th>Hist. Avg ETA</th>
+      </tr></thead><tbody>`;
+
+    for (const target of filteredTargets.sort((a, b) => direction === "down" ? b - a : a - b)) {
+      const diff   = target - currentDepth;
+      const needed = Math.abs(diff);
+      let curEtaHrs = null;
+      if (direction === "up"   && diff > 0 && rate > 0) curEtaHrs = diff / rate;
+      if (direction === "down" && diff < 0 && rate < 0) curEtaHrs = diff / rate;
+
+      const hRate = avgRate(currentDepth, target);
+      const hRateStr = hRate !== null ? `${hRate.toFixed(2)}" /hr avg` : "No history yet";
+      const hEta     = hRate !== null ? (fmtEta(needed / hRate) || "—") : "—";
+
+      const arrow    = target > currentDepth ? "↑" : "↓";
+      const arrowCls = target > currentDepth ? "ev-up" : "ev-down";
+
+      html += `<tr>
+        <td class="pred-target"><span class="${arrowCls}">${arrow}</span> ${target}"</td>
+        <td class="pred-est">${curEtaHrs !== null
+          ? `~${fmtDuration(curEtaHrs * 3600000)}<br><small style="font-weight:400;color:#86868b">${fmtEta(curEtaHrs) || ""}</small>`
+          : '<span class="pred-na">—</span>'}</td>
+        <td class="pred-hist">${hRateStr}</td>
+        <td class="pred-hist">${hEta !== "—" ? hEta : '<span class="pred-na">No history yet</span>'}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  async function main() {
+    const app = document.getElementById("app");
+    try {
+      const { sensors, history, fetched } = await getData();
+      if (!sensors.length) { app.innerHTML = `<div class="error">No sensor data.</div>`; return; }
+
+      const sensorTimelines = buildSensorTimelines(sensors);
+      const points          = computeWaterDepthTimeline(sensors);
+      const fillTimeline    = computeFillTimeline(sensorTimelines);
+      const current         = points[points.length - 1];
+      const rate            = fillRate(points);
+
+      const rateStr = rate === null ? "—"
+        : rate > 0.05  ? `+${rate.toFixed(1)}" /hr`
+        : rate < -0.05 ? `${rate.toFixed(1)}" /hr` : "Stable";
+      const rateCls = rate === null ? "flat" : rate > 0.05 ? "up" : rate < -0.05 ? "down" : "flat";
+      const pct     = Math.min(100, Math.round((current.waterDepth / MAX_DEPTH) * 100));
+
+      const { tubeHtml, labelHtml } = renderProbe(sensorTimelines);
+      const eventLog   = renderEventLog(fillTimeline, current.waterDepth, rate);
+      const predictions = renderPredictions(history, current.waterDepth, rate);
+
+      const fetchedStr = fetched
+        ? new Date(fetched).toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })
+        : "unknown";
+
+      app.innerHTML = `
+        <div class="grid">
+          <div>
+            <div class="card">
+              <h2>Probe View</h2>
+              <div class="probe-wrap">
+                <div class="probe-tube">${tubeHtml}</div>
+                <div class="probe-labels">${labelHtml}</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card">
+              <div class="depth-display">
+                <div class="depth-value">${current.waterDepth}"</div>
+                <div class="depth-unit">water depth</div>
+                <div class="depth-sub">${(current.waterDepth / 12).toFixed(2)} ft &nbsp;·&nbsp; ${pct}% of ${MAX_DEPTH}" capacity</div>
+              </div>
+              <div class="stats">
+                <div class="stat">
+                  <div class="stat-val ${rateCls}">${rateStr}</div>
+                  <div class="stat-lbl">Fill Rate (3 hr)</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-val">${MAX_DEPTH}"</div>
+                  <div class="stat-lbl">Max Depth</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-val">${points.length}</div>
+                  <div class="stat-lbl">Readings</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Water Level — Last ${HOURS} Hours</h2>
+              <div class="chart-wrap"><canvas id="chart"></canvas></div>
+              <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)}</div>
+            </div>
+
+            <div class="card">
+              <h2>Water Level History</h2>
+              ${eventLog}
+            </div>
+
+            <div class="card">
+              <h2>Predictions</h2>
+              ${predictions}
+            </div>
+          </div>
+        </div>
+      `;
+
+      const ctx = document.getElementById("chart").getContext("2d");
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: points.map(p => fmtTime(p.ts)),
+          datasets: [{
+            label: "Water Depth (in)",
+            data: points.map(p => p.waterDepth),
+            borderColor: "#2563eb",
+            backgroundColor: "rgba(37,99,235,0.08)",
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { maxTicksLimit: 8, font: { size: 11 }, color: "#86868b" }, grid: { display: false } },
+            y: {
+              min: 0, max: MAX_DEPTH + 4,
+              ticks: { callback: v => v + '"', font: { size: 11 }, color: "#86868b" },
+              grid: { color: "rgba(0,0,0,0.05)" }
+            }
+          }
+        }
+      });
+
+    } catch (err) {
+      app.innerHTML = `<div class="card"><div class="error">Error: ${err.message}</div></div>`;
+    }
+  }
+
+  main();
+</script>
+</body>
+</html>
