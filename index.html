@@ -119,6 +119,12 @@
 
     /* Chart */
     .chart-wrap { position: relative; height: 220px; }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .chart-header h2 { margin-bottom: 0; }
+    .range-tabs { display: flex; gap: 4px; }
+    .range-tab { padding: 4px 10px; font-size: 12px; font-weight: 600; border: 1px solid #d2d2d7;
+      border-radius: 6px; background: #fff; cursor: pointer; color: #86868b; }
+    .range-tab.active { background: #2563eb; border-color: #2563eb; color: #fff; }
 
     /* Last updated */
     .updated { font-size: 12px; color: #86868b; margin-top: 8px; }
@@ -550,7 +556,14 @@
             </div>
 
             <div class="card">
-              <h2>Water Level — Last 7 Days</h2>
+              <div class="chart-header">
+                <h2>Water Level</h2>
+                <div class="range-tabs">
+                  <button class="range-tab active" onclick="setRange('7d', this)">7 Days</button>
+                  <button class="range-tab" onclick="setRange('30d', this)">Month</button>
+                  <button class="range-tab" onclick="setRange('6m', this)">6 Months</button>
+                </div>
+              </div>
               <div class="chart-wrap"><canvas id="chart"></canvas></div>
               <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)}</div>
             </div>
@@ -568,72 +581,105 @@
         </div>
       `;
 
-      // Build pump annotations — find nearest chart label index for each event
-      const chartLabels = points.map(p => fmtTime(p.ts));
-      const pumpAnnotations = {};
-      (pump || []).forEach((p, i) => {
-        const evTs = new Date(p.ts).getTime();
-        let closest = 0, minDiff = Infinity;
-        points.forEach((pt, idx) => {
-          const diff = Math.abs(pt.ts - evTs);
-          if (diff < minDiff) { minDiff = diff; closest = idx; }
-        });
-        const isOn = p.action === "on";
-        pumpAnnotations[`pump${i}`] = {
-          type: "line",
-          xMin: closest, xMax: closest,
-          borderColor: isOn ? "#34c759" : "#ff9500",
-          borderWidth: 2,
-          borderDash: [4, 4],
-          label: {
-            content: isOn ? "Valve On" : "Valve Off",
-            display: true,
-            position: "start",
-            backgroundColor: isOn ? "#34c759" : "#ff9500",
-            color: "#fff",
-            font: { size: 10, weight: "600" },
-            padding: { x: 5, y: 3 },
-            borderRadius: 4,
-            yAdjust: 8,
-          }
-        };
-      });
+      // Store data globally so setRange() can rebuild the chart
+      window._chartData = { points, history, pump };
+      let _chart = null;
 
-      const ctx = document.getElementById("chart").getContext("2d");
-      new Chart(ctx, {
-        type: "line",
-        data: {
-          labels: chartLabels,
-          datasets: [{
-            label: "Water Depth (in)",
-            data: points.map(p => p.waterDepth),
-            borderColor: "#2563eb",
-            backgroundColor: "rgba(37,99,235,0.08)",
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            fill: true,
-            tension: 0.3
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            annotation: { annotations: pumpAnnotations }
+      function buildChart(range) {
+        const { points, history, pump } = window._chartData;
+        const now = Date.now();
+        const cutoffs = { "7d": 7 * 86400000, "30d": 30 * 86400000, "6m": 183 * 86400000 };
+        const cutoff  = now - cutoffs[range];
+
+        let chartPoints;
+        if (range === "7d") {
+          // Full resolution sensor data
+          chartPoints = points.filter(p => p.ts >= cutoff);
+        } else {
+          // Build step-function from history crossing events
+          const evts = (history || [])
+            .filter(e => e.ts >= cutoff)
+            .sort((a, b) => a.ts - b.ts);
+          // Seed with the depth at cutoff (last known before cutoff)
+          const before = (history || []).filter(e => e.ts < cutoff).sort((a, b) => b.ts - a.ts);
+          const seedDepth = before.length ? before[0].depth : (points[0]?.waterDepth ?? 0);
+          chartPoints = [{ ts: cutoff, waterDepth: seedDepth }];
+          for (const e of evts) {
+            chartPoints.push({ ts: e.ts - 1, waterDepth: chartPoints[chartPoints.length - 1].waterDepth });
+            chartPoints.push({ ts: e.ts,     waterDepth: e.depth });
+          }
+          // Append current point
+          const last = points[points.length - 1];
+          if (last) chartPoints.push({ ts: last.ts, waterDepth: last.waterDepth });
+        }
+
+        // Pump annotations
+        const pumpAnnotations = {};
+        (pump || []).filter(p => new Date(p.ts).getTime() >= cutoff).forEach((p, i) => {
+          const evTs = new Date(p.ts).getTime();
+          let closest = 0, minDiff = Infinity;
+          chartPoints.forEach((pt, idx) => {
+            const diff = Math.abs(pt.ts - evTs);
+            if (diff < minDiff) { minDiff = diff; closest = idx; }
+          });
+          const isOn = p.action === "on";
+          pumpAnnotations[`pump${i}`] = {
+            type: "line", xMin: closest, xMax: closest,
+            borderColor: isOn ? "#34c759" : "#ff9500",
+            borderWidth: 2, borderDash: [4, 4],
+            label: {
+              content: isOn ? "Valve On" : "Valve Off", display: true, position: "start",
+              backgroundColor: isOn ? "#34c759" : "#ff9500", color: "#fff",
+              font: { size: 10, weight: "600" }, padding: { x: 5, y: 3 },
+              borderRadius: 4, yAdjust: 8,
+            }
+          };
+        });
+
+        if (_chart) _chart.destroy();
+        const ctx = document.getElementById("chart").getContext("2d");
+        _chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: chartPoints.map(p => fmtTime(p.ts)),
+            datasets: [{
+              label: "Water Depth (in)",
+              data: chartPoints.map(p => p.waterDepth),
+              borderColor: "#2563eb",
+              backgroundColor: "rgba(37,99,235,0.08)",
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              fill: true,
+              tension: range === "7d" ? 0.3 : 0,
+            }]
           },
-          scales: {
-            x: { ticks: { maxTicksLimit: 8, font: { size: 11 }, color: "#86868b" }, grid: { display: false } },
-            y: {
-              min: 0, max: MAX_DEPTH + 4,
-              ticks: { callback: v => v + '"', font: { size: 11 }, color: "#86868b" },
-              grid: { color: "rgba(0,0,0,0.05)" }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              annotation: { annotations: pumpAnnotations }
+            },
+            scales: {
+              x: { ticks: { maxTicksLimit: 8, font: { size: 11 }, color: "#86868b" }, grid: { display: false } },
+              y: {
+                min: 0, max: MAX_DEPTH + 4,
+                ticks: { callback: v => v + '"', font: { size: 11 }, color: "#86868b" },
+                grid: { color: "rgba(0,0,0,0.05)" }
+              }
             }
           }
-        }
-      });
+        });
+      }
 
+      window.setRange = function(range, btn) {
+        document.querySelectorAll(".range-tab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        buildChart(range);
+      };
+
+      buildChart("7d");
       renderPumpLock();
 
     } catch (err) {
