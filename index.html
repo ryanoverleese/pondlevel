@@ -432,6 +432,13 @@
       const rateCls = rate === null ? "flat" : rate > 0.05 ? "up" : rate < -0.05 ? "down" : "flat";
       const pct     = Math.min(100, Math.round((current.waterDepth / MAX_DEPTH) * 100));
 
+      const rate48  = fillRate(points.filter(p => p.ts > Date.now() - 48 * 3600 * 1000));
+      const rate48Str = rate48 === null ? "—"
+        : rate48 > 0.05  ? `+${rate48.toFixed(1)}"`
+        : rate48 < -0.05 ? `${rate48.toFixed(1)}"`
+        : "Stable";
+      const rate48Cls = rate48 === null ? "flat" : rate48 > 0.05 ? "up" : rate48 < -0.05 ? "down" : "flat";
+
       const { tubeHtml, labelHtml } = renderProbe(sensorTimelines);
       const eventLog   = renderEventLog(fillTimeline, current.waterDepth, rate);
       const predictions = renderPredictions(history, current.waterDepth, rate);
@@ -465,8 +472,8 @@
                   <div class="stat-lbl">Fill Rate (12 hr)</div>
                 </div>
                 <div class="stat">
-                  <div class="stat-val">${MAX_DEPTH}"</div>
-                  <div class="stat-lbl">Max Depth</div>
+                  <div class="stat-val ${rate48Cls}">${rate48Str}</div>
+                  <div class="stat-lbl">Fill Rate (48 hr)</div>
                 </div>
                 <div class="stat">
                   <div class="stat-val">${points.length}</div>
