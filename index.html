@@ -140,9 +140,11 @@
     .pump-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: 15px;
       font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
     .pump-btn:hover { opacity: 0.85; }
+    .pump-btn:disabled { opacity: 0.3; cursor: not-allowed; }
     .pump-on  { background: #2563eb; color: #fff; }
     .pump-off { background: #e5e5ea; color: #1d1d1f; }
     .pump-confirm { font-size: 12px; color: #34c759; margin-top: 8px; min-height: 18px; }
+    .pump-lock { font-size: 12px; color: #86868b; margin-top: 8px; cursor: pointer; text-decoration: underline; }
     .ev-pump { color: #34c759; font-weight: 700; margin-right: 5px; }
     .ev-pump-off { color: #86868b; font-weight: 700; margin-right: 5px; }
 
@@ -186,7 +188,41 @@
     return { sensors: d.sensors || [], history: d.history || [], pump: d.pump || [], fetched: d.fetched };
   }
 
+  const PUMP_PIN = "2580";
+
+  function isUnlocked() {
+    return localStorage.getItem("pump_auth") === PUMP_PIN;
+  }
+
+  function renderPumpLock() {
+    const btns = document.querySelectorAll(".pump-btn");
+    const lockEl = document.getElementById("pump-lock");
+    if (isUnlocked()) {
+      btns.forEach(b => b.disabled = false);
+      if (lockEl) lockEl.textContent = "Locked? Click to lock.";
+    } else {
+      btns.forEach(b => b.disabled = true);
+      if (lockEl) lockEl.textContent = "🔒 Tap to unlock";
+    }
+  }
+
+  function toggleLock() {
+    if (isUnlocked()) {
+      localStorage.removeItem("pump_auth");
+      renderPumpLock();
+    } else {
+      const pin = prompt("Enter PIN:");
+      if (pin === PUMP_PIN) {
+        localStorage.setItem("pump_auth", PUMP_PIN);
+        renderPumpLock();
+      } else if (pin !== null) {
+        alert("Wrong PIN.");
+      }
+    }
+  }
+
   async function logPump(action, currentDepth) {
+    if (!isUnlocked()) return;
     const formData = new FormData();
     formData.append("form-name", "pump-log");
     formData.append("action", action);
@@ -194,7 +230,7 @@
     formData.append("depth", currentDepth);
     await fetch("/", { method: "POST", body: formData });
     const confirm = document.getElementById("pump-confirm");
-    confirm.textContent = action === "on" ? "Pump ON logged ✓" : "Pump OFF logged ✓";
+    confirm.textContent = action === "on" ? "Valve ON logged ✓" : "Valve OFF logged ✓";
     setTimeout(() => confirm.textContent = "", 3000);
   }
 
@@ -328,8 +364,8 @@
       let icon, label;
       if (ev.dir === "up")       { icon = `<span class="ev-up">↑</span>`;        label = `Rose past ${ev.depth}"`; }
       else if (ev.dir === "down"){ icon = `<span class="ev-down">↓</span>`;       label = `Dropped below ${ev.depth}"`; }
-      else if (ev.dir === "pump-on")  { icon = `<span class="ev-pump">⏻</span>`;      label = `Pump turned ON · ${ev.depth}" depth`; }
-      else                       { icon = `<span class="ev-pump-off">⏻</span>`;   label = `Pump turned OFF · ${ev.depth}" depth`; }
+      else if (ev.dir === "pump-on")  { icon = `<span class="ev-pump">⏻</span>`;      label = `Valve turned ON · ${ev.depth}" depth`; }
+      else                       { icon = `<span class="ev-pump-off">⏻</span>`;   label = `Valve turned OFF · ${ev.depth}" depth`; }
       html += `<tr>
         <td class="ev-time">${fmtTime(ev.ts)}</td>
         <td class="ev-event">${icon}${label}</td>
@@ -482,12 +518,13 @@
               </div>
             </div>
             <div class="card">
-              <h2>Pump Log</h2>
+              <h2>Valve Log</h2>
               <div class="pump-btns">
-                <button class="pump-btn pump-on" onclick="logPump('on', ${current.waterDepth})">Pump On</button>
-                <button class="pump-btn pump-off" onclick="logPump('off', ${current.waterDepth})">Pump Off</button>
+                <button class="pump-btn pump-on" onclick="logPump('on', ${current.waterDepth})">Valve On</button>
+                <button class="pump-btn pump-off" onclick="logPump('off', ${current.waterDepth})">Valve Off</button>
               </div>
               <div class="pump-confirm" id="pump-confirm"></div>
+              <div class="pump-lock" id="pump-lock" onclick="toggleLock()"></div>
             </div>
           </div>
 
@@ -561,6 +598,8 @@
           }
         }
       });
+
+      renderPumpLock();
 
     } catch (err) {
       app.innerHTML = `<div class="card"><div class="error">Error: ${err.message}</div></div>`;
