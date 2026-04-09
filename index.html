@@ -168,7 +168,15 @@
     .valve-off .valve-dot { background: #86868b; }
     @keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.25); } 50% { box-shadow: 0 0 0 6px rgba(34,197,94,0.1); } }
 
-    /* Pump log */
+    /* Valve log card — collapsed by default */
+    .valve-card { cursor: pointer; padding: 10px 16px; }
+    .valve-card-collapsed { display: flex; align-items: center; gap: 8px; }
+    .valve-card-collapsed .valve-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .valve-card-collapsed .vc-label { font-size: 12px; color: #86868b; }
+    .valve-card-expanded { display: none; padding-top: 12px; }
+    .valve-card.open .valve-card-expanded { display: block; }
+    .valve-card.open { padding: 16px; cursor: default; }
+
     .pump-btns { display: flex; gap: 10px; }
     .pump-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: 15px;
       font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
@@ -238,6 +246,17 @@
       if (lockEl) lockEl.textContent = "🔒 Tap to unlock";
     }
   }
+
+  window.expandValveCard = function() {
+    const card = document.getElementById("valve-card");
+    if (!card.classList.contains("open")) {
+      card.classList.add("open");
+      renderPumpLock();
+    }
+  };
+  window.collapseValveCard = function() {
+    document.getElementById("valve-card").classList.remove("open");
+  };
 
   function toggleLock() {
     if (isUnlocked()) {
@@ -630,14 +649,21 @@
                 <div class="probe-tube">${tubeHtml}</div>
               </div>
             </div>
-            <div class="card">
-              <h2>Valve Log</h2>
-              <div class="pump-btns">
-                <button class="pump-btn pump-on" onclick="logPump('on', ${current.waterDepth})">Valve On</button>
-                <button class="pump-btn pump-off" onclick="logPump('off', ${current.waterDepth})">Valve Off</button>
+            <div class="card valve-card" id="valve-card" onclick="expandValveCard()">
+              <div class="valve-card-collapsed">
+                <div class="valve-dot ${valveIsOn ? "valve-on" : "valve-off"}" style="background:${valveIsOn ? "#22c55e" : "#c7c7cc"};${valveIsOn ? "box-shadow:0 0 0 3px rgba(34,197,94,0.25);animation:pulse 1.5s infinite;" : ""}"></div>
+                <span class="vc-label">Valve ${valveIsOn ? "ON" : "OFF"} &nbsp;·&nbsp; tap to log</span>
               </div>
-              <div class="pump-confirm" id="pump-confirm"></div>
-              <div class="pump-lock" id="pump-lock" onclick="toggleLock()"></div>
+              <div class="valve-card-expanded">
+                <h2 style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#86868b;margin-bottom:14px;">Valve Log</h2>
+                <div class="pump-btns">
+                  <button class="pump-btn pump-on" onclick="event.stopPropagation();logPump('on', ${current.waterDepth})">Valve On</button>
+                  <button class="pump-btn pump-off" onclick="event.stopPropagation();logPump('off', ${current.waterDepth})">Valve Off</button>
+                </div>
+                <div class="pump-confirm" id="pump-confirm"></div>
+                <div class="pump-lock" id="pump-lock" onclick="event.stopPropagation();toggleLock()"></div>
+                <div style="margin-top:10px;"><a href="#" style="font-size:12px;color:#86868b;" onclick="event.preventDefault();event.stopPropagation();collapseValveCard()">Close</a></div>
+              </div>
             </div>
           </div>
 
