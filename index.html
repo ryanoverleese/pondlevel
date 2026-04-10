@@ -485,8 +485,10 @@
       if (next) {
         const gap = ev.ts - next.ts;
         const inches = Math.abs(ev.depth - next.depth);
-        durCell = fmtDuration(gap);
-        rateCell = inches > 0 ? `${(inches / (gap / 3600000)).toFixed(1)} in/hr` : "—";
+        if (gap > 60000) {
+          durCell = fmtDuration(gap);
+          rateCell = inches > 0 ? `${(inches / (gap / 3600000)).toFixed(1)} in/hr` : "—";
+        }
       }
       let icon, label;
       if (ev.dir === "up")       { icon = `<span class="ev-up">↑</span>`;        label = `Rose past ${ev.depth}"`; }
