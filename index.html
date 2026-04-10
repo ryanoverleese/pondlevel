@@ -225,6 +225,7 @@
   const WET_THRESHOLD  = 15;
   const HOURS = 168;
   const SENSOR_DEPTHS_FROM_TOP = [34, 30, 26, 22, 18, 14, 10, 6, 2];
+  const FLOW_RATE_GPM  = 5.1;
 
   async function getData() {
     const resp = await fetch("./pond_data.json");
@@ -444,7 +445,22 @@
     return { tubeHtml };
   }
 
+  // Returns a Map: onTs → gallons used (for completed cycles only)
+  function computeCycleGallons(pumpEvents) {
+    const sorted = [...(pumpEvents || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const result = new Map();
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].action !== "on") continue;
+      const off = sorted.slice(i + 1).find(e => e.action === "off");
+      if (!off) continue;
+      const mins = (new Date(off.ts) - new Date(sorted[i].ts)) / 60000;
+      result.set(new Date(sorted[i].ts).getTime(), Math.round(mins * FLOW_RATE_GPM));
+    }
+    return result;
+  }
+
   function renderEventLog(fillTimeline, historyEvents, currentDepth, rate, pumpEvents) {
+    const cycleGallons = computeCycleGallons(pumpEvents);
     const SEDIMENT_DEPTHS = new Set([10, 14]);
     const events = [];
     // Use history events first — they have accurate cron-detected timestamps
@@ -503,7 +519,11 @@
       let icon, label;
       if (ev.dir === "up")       { icon = `<span class="ev-up">↑</span>`;        label = `Rose past ${ev.depth}"`; }
       else if (ev.dir === "down"){ icon = `<span class="ev-down">↓</span>`;       label = `Dropped below ${ev.depth}"`; }
-      else if (ev.dir === "pump-on")  { icon = `<span class="ev-pump">⏻</span>`;      label = `Valve ON${ev.depth ? ` · ${ev.depth}"` : ""}`; }
+      else if (ev.dir === "pump-on")  {
+        icon = `<span class="ev-pump">⏻</span>`;
+        const gal = cycleGallons.get(ev.ts);
+        label = `Valve ON${ev.depth ? ` · ${ev.depth}"` : ""}${gal ? ` · ~${gal.toLocaleString()} gal` : ""}`;
+      }
       else                       { icon = `<span class="ev-pump-off">⏻</span>`;   label = `Valve OFF${ev.depth ? ` · ${ev.depth}"` : ""}`; }
       html += `<tr>
         <td class="ev-time">${fmtTime(ev.ts)}</td>
@@ -680,10 +700,11 @@
       const valveIsOn    = lastPumpEvent?.action === "on";
       const valveElapsed = lastPumpEvent ? (Date.now() - new Date(lastPumpEvent.ts).getTime()) : null;
       const valveHrsStr  = valveElapsed !== null ? fmtDuration(valveElapsed) : "unknown";
+      const runningGal   = valveIsOn && valveElapsed !== null ? Math.round((valveElapsed / 60000) * FLOW_RATE_GPM) : null;
       const valveStatusHtml = lastPumpEvent
         ? `<div class="valve-status ${valveIsOn ? "valve-on" : "valve-off"}" id="valve-badge">
              <span class="valve-dot"></span>
-             Valve ${valveIsOn ? "ON" : "OFF"} &nbsp;·&nbsp; ${valveHrsStr} on this cycle
+             Valve ${valveIsOn ? "ON" : "OFF"} &nbsp;·&nbsp; ${valveHrsStr}${runningGal !== null ? ` &nbsp;·&nbsp; ~${runningGal.toLocaleString()} gal` : ""}
            </div>`
         : "";
 
