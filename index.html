@@ -342,11 +342,23 @@
     formData.append("ts", new Date().toISOString());
     formData.append("depth", currentDepth);
     await fetch("/", { method: "POST", body: formData });
+    // Save state + timestamp to localStorage for instant display
+    const valveState = { action, ts: new Date().toISOString(), depth: currentDepth };
+    localStorage.setItem("valve_state", JSON.stringify(valveState));
     window._valveOn = action === "on";
     refreshValveBtns();
+    updateValveBadge(action === "on", valveState.ts);
     const confirm = document.getElementById("pump-confirm");
     confirm.textContent = action === "on" ? "Valve ON logged ✓" : "Valve OFF logged ✓";
     setTimeout(() => confirm.textContent = "", 3000);
+  }
+
+  function updateValveBadge(isOn, ts) {
+    const badge = document.getElementById("valve-badge");
+    if (!badge) return;
+    const elapsed = ts ? fmtDuration(Date.now() - new Date(ts).getTime()) : null;
+    badge.className = `valve-status ${isOn ? "valve-on" : "valve-off"}`;
+    badge.innerHTML = `<span class="valve-dot"></span> Valve ${isOn ? "ON" : "OFF"}${elapsed ? ` &nbsp;·&nbsp; ${elapsed} on this cycle` : ""}`;
   }
 
   function buildSensorTimelines(sensors) {
@@ -646,15 +658,18 @@
       const eventLog    = renderEventLog(fillTimeline, current.waterDepth, rate, pump);
       const predictions = renderPredictions(history, current.waterDepth, rate, pump);
 
-      // Valve status
+      // Valve status — prefer localStorage (instant) over pond_data.json (3hr delay)
       const pumpSortedMain = [...(pump || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
-      const lastPumpEvent  = pumpSortedMain[pumpSortedMain.length - 1];
-      const valveIsOn      = lastPumpEvent?.action === "on";
-      const valveElapsed   = lastPumpEvent ? (Date.now() - new Date(lastPumpEvent.ts).getTime()) : null;
-      const valveHrs       = valveElapsed !== null ? valveElapsed / 3600000 : null;
-      const valveHrsStr    = valveHrs !== null ? fmtDuration(valveElapsed) : "unknown";
+      const lastPumpFromData = pumpSortedMain[pumpSortedMain.length - 1];
+      const localState = JSON.parse(localStorage.getItem("valve_state") || "null");
+      // Use whichever is more recent
+      const lastPumpEvent = localState && (!lastPumpFromData || new Date(localState.ts) > new Date(lastPumpFromData.ts))
+        ? localState : lastPumpFromData;
+      const valveIsOn    = lastPumpEvent?.action === "on";
+      const valveElapsed = lastPumpEvent ? (Date.now() - new Date(lastPumpEvent.ts).getTime()) : null;
+      const valveHrsStr  = valveElapsed !== null ? fmtDuration(valveElapsed) : "unknown";
       const valveStatusHtml = lastPumpEvent
-        ? `<div class="valve-status ${valveIsOn ? "valve-on" : "valve-off"}">
+        ? `<div class="valve-status ${valveIsOn ? "valve-on" : "valve-off"}" id="valve-badge">
              <span class="valve-dot"></span>
              Valve ${valveIsOn ? "ON" : "OFF"} &nbsp;·&nbsp; ${valveHrsStr} on this cycle
            </div>`
