@@ -551,6 +551,39 @@
 
   // ── Predictions ─────────────────────────────────────────────────────────────
 
+  function renderValveLog(pumpEvents) {
+    const sorted = [...(pumpEvents || [])].sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    if (!sorted.length) return `<p style="color:#86868b;font-size:14px;">No valve events recorded yet.</p>`;
+
+    // Pair ON events with the next OFF
+    const asc = [...sorted].reverse();
+    const cycles = [];
+    for (let i = 0; i < asc.length; i++) {
+      if (asc[i].action !== "on") continue;
+      const off = asc.slice(i + 1).find(e => e.action === "off");
+      const onTs  = new Date(asc[i].ts).getTime();
+      const offTs = off ? new Date(off.ts).getTime() : null;
+      const durMs = offTs ? offTs - onTs : Date.now() - onTs;
+      const gal   = Math.round((durMs / 60000) * FLOW_RATE_GPM);
+      cycles.push({ onTs, offTs, durMs, gal, active: !offTs });
+    }
+    cycles.sort((a, b) => b.onTs - a.onTs);
+
+    let html = `<table class="event-table"><thead><tr>
+      <th>Started</th><th>Ended</th><th style="text-align:right">Duration</th><th style="text-align:right">Est. Gallons</th>
+    </tr></thead><tbody>`;
+    for (const c of cycles) {
+      html += `<tr>
+        <td class="ev-time">${fmtTime(c.onTs)}</td>
+        <td class="ev-time">${c.active ? `<span style="color:#22c55e;font-weight:600;">Active</span>` : fmtTime(c.offTs)}</td>
+        <td class="ev-dur">${fmtDuration(c.durMs)}${c.active ? " so far" : ""}</td>
+        <td class="ev-rate">~${c.gal.toLocaleString()} gal</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+    return html;
+  }
+
   function renderPredictions(historyEvents, currentDepth, rate, pumpEvents) {
     const DEPTHS = SENSOR_DEPTHS_FROM_TOP.map(d => DEPTH_OFFSET - d).sort((a, b) => a - b);
     const targets = DEPTHS.filter(d => d !== currentDepth);
@@ -689,6 +722,7 @@
       const { tubeHtml } = renderProbe(sensorTimelines);
       const eventLog    = renderEventLog(fillTimeline, history, current.waterDepth, rate, pump);
       const predictions = renderPredictions(history, current.waterDepth, rate, pump);
+      const valveLog    = renderValveLog(pump);
 
       // Valve status — prefer localStorage (instant) over pond_data.json (3hr delay)
       const pumpSortedMain = [...(pump || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
@@ -781,6 +815,11 @@
             <div class="card">
               <h2>Predictions</h2>
               ${predictions}
+            </div>
+
+            <div class="card">
+              <h2>Valve History</h2>
+              ${valveLog}
             </div>
           </div>
         </div>
