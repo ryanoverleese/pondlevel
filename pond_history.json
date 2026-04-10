@@ -27,6 +27,13 @@
       "depth_from_top": 10,
       "dir": "up",
       "vwc": 32.0
+    },
+    {
+      "ts": 1775695200000,
+      "depth": 18,
+      "depth_from_top": 26,
+      "dir": "up",
+      "vwc": 15.0
     }
   ],
   "last_states": {

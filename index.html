@@ -444,11 +444,21 @@
     return { tubeHtml };
   }
 
-  function renderEventLog(fillTimeline, currentDepth, rate, pumpEvents) {
+  function renderEventLog(fillTimeline, historyEvents, currentDepth, rate, pumpEvents) {
+    const SEDIMENT_DEPTHS = new Set([10, 14]);
     const events = [];
+    // Use history events first — they have accurate cron-detected timestamps
+    const covered = new Set();
+    for (const h of (historyEvents || [])) {
+      if (SEDIMENT_DEPTHS.has(h.depth)) continue;
+      events.push({ ts: h.ts, dir: h.dir, depth: h.depth });
+      covered.add(`${h.depth}-${h.dir}`);
+    }
+    // Fill in any depths not covered by history (e.g. pre-data events)
     for (const item of fillTimeline) {
-      if (item.hitAt)   events.push({ ts: item.hitAt,   dir: "up",   depth: item.waterDepth });
-      if (item.driedAt) events.push({ ts: item.driedAt, dir: "down", depth: item.waterDepth });
+      if (SEDIMENT_DEPTHS.has(item.waterDepth)) continue;
+      if (item.hitAt   && !covered.has(`${item.waterDepth}-up`))   events.push({ ts: item.hitAt,   dir: "up",   depth: item.waterDepth });
+      if (item.driedAt && !covered.has(`${item.waterDepth}-down`)) events.push({ ts: item.driedAt, dir: "down", depth: item.waterDepth });
     }
     for (const p of (pumpEvents || [])) {
       events.push({ ts: new Date(p.ts).getTime(), dir: p.action === "on" ? "pump-on" : "pump-off", depth: p.depth });
@@ -657,7 +667,7 @@
       const rate48Cls = rate48 === null ? "flat" : rate48 > 0.05 ? "up" : rate48 < -0.05 ? "down" : "flat";
 
       const { tubeHtml } = renderProbe(sensorTimelines);
-      const eventLog    = renderEventLog(fillTimeline, current.waterDepth, rate, pump);
+      const eventLog    = renderEventLog(fillTimeline, history, current.waterDepth, rate, pump);
       const predictions = renderPredictions(history, current.waterDepth, rate, pump);
 
       // Valve status — prefer localStorage (instant) over pond_data.json (3hr delay)
