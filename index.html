@@ -529,7 +529,7 @@
       if (ev.dir === "up") {
         icon = `<span class="ev-up">↑</span>`;
         const from = fromDepth.get(ev.ts);
-        label = from !== null ? `${from}" → ${ev.depth}"` : `${ev.depth}"`;
+        label = (from !== null && from !== ev.depth) ? `${from}" → ${ev.depth}"` : `${ev.depth}"`;
       } else if (ev.dir === "down") {
         icon = `<span class="ev-down">↓</span>`;
         const from = fromDepth.get(ev.ts);
