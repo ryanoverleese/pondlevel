@@ -481,13 +481,6 @@
     }
     events.sort((a, b) => b.ts - a.ts);
 
-    // Build "from depth" map: for each depth event, what was the depth just before it?
-    const depthEvents = [...events].filter(e => e.dir === "up" || e.dir === "down").sort((a, b) => a.ts - b.ts);
-    const fromDepth = new Map();
-    for (let i = 0; i < depthEvents.length; i++) {
-      fromDepth.set(depthEvents[i].ts, i > 0 ? depthEvents[i - 1].depth : null);
-    }
-
     const rateStr = rate === null ? "Stable"
       : rate > 0.05  ? `+${rate.toFixed(1)}" /hr`
       : rate < -0.05 ? `${rate.toFixed(1)}" /hr`
@@ -528,12 +521,10 @@
       let icon, label;
       if (ev.dir === "up") {
         icon = `<span class="ev-up">↑</span>`;
-        const from = fromDepth.get(ev.ts);
-        label = (from !== null && from !== ev.depth) ? `${from}" → ${ev.depth}"` : `${ev.depth}"`;
+        label = `${ev.depth}"`;
       } else if (ev.dir === "down") {
         icon = `<span class="ev-down">↓</span>`;
-        const from = fromDepth.get(ev.ts);
-        label = (from !== null && from !== ev.depth) ? `${from}" → ${ev.depth}"` : `${ev.depth}"`;
+        label = `${ev.depth}"`;
       }
       else if (ev.dir === "pump-on")  {
         icon = `<span class="ev-pump">⏻</span>`;
