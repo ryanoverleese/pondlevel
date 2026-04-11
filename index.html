@@ -524,7 +524,11 @@
         label = `${ev.depth}"`;
       } else if (ev.dir === "down") {
         icon = `<span class="ev-down">↓</span>`;
-        label = `${ev.depth}"`;
+        // Show the depth it dropped TO (next sensor below the crossing depth)
+        const waterDepths = SENSOR_DEPTHS_FROM_TOP.map(d => DEPTH_OFFSET - d).sort((a, b) => a - b);
+        const below = waterDepths.filter(d => d < ev.depth);
+        const toDepth = below.length ? below[below.length - 1] : 0;
+        label = `${toDepth}"`;
       }
       else if (ev.dir === "pump-on")  {
         icon = `<span class="ev-pump">⏻</span>`;
