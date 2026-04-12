@@ -397,10 +397,10 @@
   }
 
   function renderProbe(sensorTimelines) {
-    const svgW = 260, svgH = 195;
+    const svgW = 280, svgH = 195;
     const bowlTopY = 8, bowlBotY = 182;
     const bowlH = bowlBotY - bowlTopY;
-    const tL = 22, tR = 238, bL = 108, bR = 152;
+    const tL = 4, tR = 276, bL = 112, bR = 168;
 
     function edgeAt(y) {
       const t = (y - bowlTopY) / bowlH;
@@ -437,8 +437,8 @@
     }
 
     const labelY = waterY + Math.min(22, (bowlBotY - waterY) / 2 + 10);
-    const clipPath = `M ${tL},${bowlTopY} C ${tL+4},${bowlTopY+68} ${bL-18},${bowlBotY-22} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+18},${bowlBotY-22} ${tR-4},${bowlTopY+68} ${tR},${bowlTopY} Z`;
-    const outline  = `M ${tL},${bowlTopY} C ${tL+4},${bowlTopY+68} ${bL-18},${bowlBotY-22} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+18},${bowlBotY-22} ${tR-4},${bowlTopY+68} ${tR},${bowlTopY}`;
+    const clipPath = `M ${tL},${bowlTopY} C ${tL+2},${bowlTopY+100} ${bL-8},${bowlBotY-18} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+8},${bowlBotY-18} ${tR-2},${bowlTopY+100} ${tR},${bowlTopY} Z`;
+    const outline  = `M ${tL},${bowlTopY} C ${tL+2},${bowlTopY+100} ${bL-8},${bowlBotY-18} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+8},${bowlBotY-18} ${tR-2},${bowlTopY+100} ${tR},${bowlTopY}`;
 
     const tubeHtml = `
       <svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="max-width:260px;display:block;margin:0 auto">
