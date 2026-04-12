@@ -55,43 +55,7 @@
 
     /* Probe diagram */
     .probe-wrap { display: flex; justify-content: center; padding: 8px 0; }
-    .probe-tube {
-      width: 44px;
-      border-radius: 22px;
-      overflow: hidden;
-      border: 2px solid #d2d2d7;
-      background: #f5f5f7;
-      position: relative;
-    }
-    .probe-sensor {
-      width: 100%;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 600;
-      transition: background 0.4s;
-    }
-    .probe-sensor.wet      { background: #2563eb; color: #fff; }
-    .probe-sensor.sediment { background: #60a5fa; color: #fff; }
-    .probe-sensor.dry      { background: #e5e5ea; color: #86868b; }
-    .probe-labels {
-      display: flex;
-      flex-direction: column;
-      margin-left: 10px;
-      justify-content: space-around;
-    }
-    .probe-label {
-      height: 28px;
-      font-size: 11px;
-      display: flex;
-      align-items: center;
-      color: #3a3a3f;
-      white-space: nowrap;
-    }
-    .probe-label.wet          { font-weight: 600; color: #2563eb; }
-    .probe-label.sediment-lbl { font-weight: 600; color: #60a5fa; }
+    .probe-tube { width: 100%; }
 
     /* Event log table */
     .event-current {
@@ -433,15 +397,58 @@
   }
 
   function renderProbe(sensorTimelines) {
-    let tubeHtml = "", labelHtml = "";
-    const ordered = [...SENSOR_DEPTHS_FROM_TOP].reverse();
-    for (const d of ordered) {
-      const readings = sensorTimelines[d] || [];
-      const vwc = readings.length ? readings[readings.length - 1].vwc : 0;
-      const waterDepth = DEPTH_OFFSET - d;
-      const cls = vwc >= WET_THRESHOLD ? "wet" : "dry";
-      tubeHtml += `<div class="probe-sensor ${cls}" title="${d}&quot; from top — ${vwc.toFixed(1)}%">${waterDepth}"</div>`;
+    const svgW = 260, svgH = 195;
+    const bowlTopY = 8, bowlBotY = 182;
+    const bowlH = bowlBotY - bowlTopY;
+    const tL = 22, tR = 238, bL = 108, bR = 152;
+
+    function edgeAt(y) {
+      const t = (y - bowlTopY) / bowlH;
+      return { left: tL + t * (bL - tL), right: tR - t * (tR - bR) };
     }
+
+    const SEDIMENT = new Set([30, 34]);
+    const sensorData = SENSOR_DEPTHS_FROM_TOP
+      .filter(d => !SEDIMENT.has(d))
+      .map(d => {
+        const readings = sensorTimelines[d] || [];
+        const vwc = readings.length ? readings[readings.length - 1].vwc : 0;
+        return { waterDepth: DEPTH_OFFSET - d, wet: vwc >= WET_THRESHOLD };
+      });
+
+    // Shallowest wet sensor = current water depth
+    let curDepth = 0;
+    for (const s of [...sensorData].reverse()) {
+      if (s.wet) { curDepth = s.waterDepth; break; }
+    }
+
+    const waterFrac = Math.min(1, curDepth / MAX_DEPTH);
+    const waterY = bowlBotY - waterFrac * bowlH;
+    const { left: wL, right: wR } = edgeAt(waterY);
+
+    let dots = '';
+    for (const s of sensorData) {
+      const sY = bowlBotY - (s.waterDepth / MAX_DEPTH) * bowlH;
+      const { left, right } = edgeAt(sY);
+      const fill = s.wet ? '#2563eb' : '#d1d5db';
+      dots += `<circle cx="${(left - 6).toFixed(1)}" cy="${sY.toFixed(1)}" r="4" fill="${fill}"/>`;
+      dots += `<circle cx="${(right + 6).toFixed(1)}" cy="${sY.toFixed(1)}" r="4" fill="${fill}"/>`;
+      dots += `<text x="${(right + 14).toFixed(1)}" y="${(sY + 4).toFixed(1)}" font-size="9" fill="#9ca3af">${s.waterDepth}"</text>`;
+    }
+
+    const labelY = waterY + Math.min(22, (bowlBotY - waterY) / 2 + 10);
+    const clipPath = `M ${tL},${bowlTopY} C ${tL+4},${bowlTopY+68} ${bL-18},${bowlBotY-22} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+18},${bowlBotY-22} ${tR-4},${bowlTopY+68} ${tR},${bowlTopY} Z`;
+    const outline  = `M ${tL},${bowlTopY} C ${tL+4},${bowlTopY+68} ${bL-18},${bowlBotY-22} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+18},${bowlBotY-22} ${tR-4},${bowlTopY+68} ${tR},${bowlTopY}`;
+
+    const tubeHtml = `
+      <svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="max-width:260px;display:block;margin:0 auto">
+        <defs><clipPath id="bowl-clip"><path d="${clipPath}"/></clipPath></defs>
+        ${curDepth > 0 ? `<rect x="0" y="${waterY.toFixed(1)}" width="${svgW}" height="${svgH}" fill="#bfdbfe" clip-path="url(#bowl-clip)" opacity="0.85"/>` : ''}
+        <path d="${outline}" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round"/>
+        ${dots}
+        ${curDepth > 0 ? `<line x1="${wL.toFixed(1)}" y1="${waterY.toFixed(1)}" x2="${wR.toFixed(1)}" y2="${waterY.toFixed(1)}" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.6"/>` : ''}
+        ${curDepth > 0 ? `<text x="${(svgW/2).toFixed(1)}" y="${labelY.toFixed(1)}" font-size="13" font-weight="700" fill="#1d4ed8" text-anchor="middle">${curDepth}"</text>` : ''}
+      </svg>`;
     return { tubeHtml };
   }
 
