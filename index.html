@@ -851,9 +851,9 @@
               <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)} &nbsp;·&nbsp; <a href="" onclick="location.reload();return false;" style="color:#0071e3;text-decoration:none;">↻ Refresh</a></div>
             </div>
 
-            <div class="card">
-              <h2>Water Level History</h2>
-              ${eventLog}
+            <div class="card" style="cursor:pointer;" onclick="this.querySelector('.history-body').style.display=this.querySelector('.history-body').style.display==='none'?'block':'none';this.querySelector('.history-toggle').textContent=this.querySelector('.history-body').style.display==='none'?'▶':'▼'">
+              <h2 style="display:flex;justify-content:space-between;align-items:center;">Water Level History <span class="history-toggle" style="font-size:11px;color:#86868b;">▶</span></h2>
+              <div class="history-body" style="display:none;">${eventLog}</div>
             </div>
 
             <div class="card">
