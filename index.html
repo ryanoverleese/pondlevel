@@ -985,10 +985,33 @@
               tooltip: {
                 mode: 'index',
                 intersect: false,
+                position: 'nearest',
                 filter: item => item.datasetIndex === 0,
+                yAlign: 'bottom',
+                xAlign: 'center',
                 callbacks: {
                   title: items => items[0]?.label ?? '',
                   label: item => `${item.raw}"`
+                },
+                external: function(context) {
+                  const { chart, tooltip } = context;
+                  let el = document.getElementById('pond-tooltip');
+                  if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'pond-tooltip';
+                    el.style.cssText = 'position:absolute;background:#1d1d1f;color:#fff;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;pointer-events:none;transition:opacity 0.1s;white-space:nowrap;left:50%;transform:translateX(-50%);';
+                    chart.canvas.parentNode.style.position = 'relative';
+                    chart.canvas.parentNode.appendChild(el);
+                  }
+                  if (tooltip.opacity === 0) { el.style.opacity = 0; return; }
+                  const item = tooltip.dataPoints?.[0];
+                  if (!item) return;
+                  el.style.opacity = 1;
+                  el.style.bottom = '4px';
+                  el.style.top = 'auto';
+                  const x = tooltip.caretX;
+                  el.style.left = x + 'px';
+                  el.textContent = `${item.label}  •  ${item.raw}"`;
                 }
               }
             },
