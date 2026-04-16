@@ -94,6 +94,22 @@
     /* Last updated */
     .updated { font-size: 12px; color: #86868b; margin-top: 8px; }
 
+    /* Measure tool */
+    .measure-btn { padding: 4px 10px; font-size: 12px; font-weight: 600; border: 1px solid #d2d2d7;
+      border-radius: 6px; background: #fff; cursor: pointer; color: #86868b; margin-left: 6px; }
+    .measure-btn.active { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+    .measure-hint { font-size: 11px; color: #f59e0b; font-weight: 600; margin-top: 6px; display: none; }
+    .measure-hint.visible { display: block; }
+    .measure-result {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+      padding: 12px 16px; margin-top: 10px; display: none;
+      grid-template-columns: repeat(4, 1fr); gap: 8px;
+    }
+    .measure-result.visible { display: grid; }
+    .measure-stat { text-align: center; }
+    .measure-stat-val { font-size: 18px; font-weight: 700; color: #1d1d1f; letter-spacing: -0.02em; }
+    .measure-stat-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #92400e; margin-top: 2px; }
+
     /* Predictions */
     .pred-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .pred-table th { text-align: left; padding: 4px 8px; font-size: 11px; font-weight: 600;
@@ -815,11 +831,21 @@
             <div class="card">
               <div class="chart-header">
                 <h2>Water Level</h2>
-                <div class="range-tabs">
-                  <button class="range-tab active" onclick="setRange('7d', this)">7 Days</button>
-                  <button class="range-tab" onclick="setRange('30d', this)">Month</button>
-                  <button class="range-tab" onclick="setRange('6m', this)">6 Months</button>
+                <div style="display:flex;align-items:center;">
+                  <div class="range-tabs">
+                    <button class="range-tab active" onclick="setRange('7d', this)">7 Days</button>
+                    <button class="range-tab" onclick="setRange('30d', this)">Month</button>
+                    <button class="range-tab" onclick="setRange('6m', this)">6 Months</button>
+                  </div>
+                  <button class="measure-btn" id="measureBtn" onclick="toggleMeasure()">⇔ Measure</button>
                 </div>
+              </div>
+              <div class="measure-hint" id="measureHint">Click a start point on the graph</div>
+              <div class="measure-result" id="measureResult">
+                <div class="measure-stat"><div class="measure-stat-val" id="mTime">—</div><div class="measure-stat-lbl">Time Elapsed</div></div>
+                <div class="measure-stat"><div class="measure-stat-val" id="mLevel">—</div><div class="measure-stat-lbl">Level Change</div></div>
+                <div class="measure-stat"><div class="measure-stat-val" id="mRate">—</div><div class="measure-stat-lbl">Rate</div></div>
+                <div class="measure-stat"><div class="measure-stat-val" id="mGallons">—</div><div class="measure-stat-lbl">Gallons Pumped</div></div>
               </div>
               <div class="chart-wrap"><canvas id="chart"></canvas></div>
               <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)} &nbsp;·&nbsp; <a href="" onclick="location.reload();return false;" style="color:#0071e3;text-decoration:none;">↻ Refresh</a></div>
@@ -896,6 +922,7 @@
         // Valve-on dataset: water depth when valve is on, null otherwise
         const valveData = chartPoints.map(p => inValveRange(p.ts) ? p.waterDepth : null);
 
+        window._chartData._currentChartPoints = chartPoints;
         if (_chart) _chart.destroy();
         const ctx = document.getElementById("chart").getContext("2d");
         const crosshairPlugin = {
@@ -976,6 +1003,83 @@
           }
         });
       }
+
+      // ── Measure tool ────────────────────────────────────────────────────────
+      window._measureMode = false;
+      window._measureA = null;
+
+      window.toggleMeasure = function() {
+        window._measureMode = !window._measureMode;
+        window._measureA = null;
+        const btn = document.getElementById('measureBtn');
+        const hint = document.getElementById('measureHint');
+        const result = document.getElementById('measureResult');
+        btn.classList.toggle('active', window._measureMode);
+        hint.classList.toggle('visible', window._measureMode);
+        hint.textContent = 'Click a start point on the graph';
+        result.classList.remove('visible');
+        document.getElementById('chart').style.cursor = window._measureMode ? 'crosshair' : '';
+      };
+
+      document.getElementById('chart').addEventListener('click', function(e) {
+        if (!window._measureMode || !_chart) return;
+        const pts = _chart.getElementsAtEventForMode(e, 'index', { intersect: false }, false);
+        if (!pts.length) return;
+        const idx = pts[0].index;
+        const cp = window._chartData._currentChartPoints;
+        if (!cp) return;
+        const pt = cp[idx];
+        if (!pt) return;
+
+        if (!window._measureA) {
+          window._measureA = pt;
+          const hint = document.getElementById('measureHint');
+          hint.textContent = `Start: ${fmtTime(pt.ts)} @ ${pt.waterDepth}" — now click an end point`;
+        } else {
+          const a = window._measureA;
+          const b = pt;
+          window._measureA = null;
+          document.getElementById('measureHint').textContent = 'Click a start point on the graph';
+
+          const t1 = Math.min(a.ts, b.ts), t2 = Math.max(a.ts, b.ts);
+          const d1 = a.ts <= b.ts ? a.waterDepth : b.waterDepth;
+          const d2 = a.ts <= b.ts ? b.waterDepth : a.waterDepth;
+          const elapsedMs = t2 - t1;
+          const elapsedHrs = elapsedMs / 3600000;
+          const levelChange = d2 - d1;
+          const rate = elapsedHrs > 0 ? levelChange / elapsedHrs : 0;
+
+          // Gallons pumped = valve-on minutes within window × FLOW_RATE_GPM
+          const { pump } = window._chartData;
+          const pumpSorted = [...(pump || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+          let valveOnMs = 0;
+          for (let i = 0; i < pumpSorted.length; i++) {
+            if (pumpSorted[i].action !== 'on') continue;
+            const onTs = new Date(pumpSorted[i].ts).getTime();
+            const offEv = pumpSorted.slice(i + 1).find(p => p.action === 'off');
+            const offTs = offEv ? new Date(offEv.ts).getTime() : Date.now();
+            const overlapStart = Math.max(onTs, t1);
+            const overlapEnd = Math.min(offTs, t2);
+            if (overlapEnd > overlapStart) valveOnMs += overlapEnd - overlapStart;
+          }
+          const gallons = Math.round((valveOnMs / 60000) * FLOW_RATE_GPM);
+
+          // Format time elapsed
+          const totalMins = Math.round(elapsedMs / 60000);
+          const hrs = Math.floor(totalMins / 60), mins = totalMins % 60;
+          const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+
+          const levelStr = (levelChange >= 0 ? '+' : '') + levelChange.toFixed(1) + '"';
+          const rateStr = (rate >= 0 ? '+' : '') + rate.toFixed(2) + '"/hr';
+          const gallonsStr = gallons > 0 ? gallons.toLocaleString() : '0';
+
+          document.getElementById('mTime').textContent = timeStr;
+          document.getElementById('mLevel').textContent = levelStr;
+          document.getElementById('mRate').textContent = rateStr;
+          document.getElementById('mGallons').textContent = gallonsStr;
+          document.getElementById('measureResult').classList.add('visible');
+        }
+      });
 
       window.setRange = function(range, btn) {
         document.querySelectorAll(".range-tab").forEach(b => b.classList.remove("active"));
