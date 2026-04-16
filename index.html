@@ -851,8 +851,8 @@
               <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)} &nbsp;·&nbsp; <a href="" onclick="location.reload();return false;" style="color:#0071e3;text-decoration:none;">↻ Refresh</a></div>
             </div>
 
-            <div class="card" style="cursor:pointer;" onclick="this.querySelector('.history-body').style.display=this.querySelector('.history-body').style.display==='none'?'block':'none';this.querySelector('.history-toggle').textContent=this.querySelector('.history-body').style.display==='none'?'▶':'▼'">
-              <h2 style="display:flex;justify-content:space-between;align-items:center;">Water Level History <span class="history-toggle" style="font-size:11px;color:#86868b;">▶</span></h2>
+            <div class="card" style="cursor:pointer;" onclick="const b=this.querySelector('.history-body'),o=b.style.display==='none';b.style.display=o?'block':'none';this.querySelector('.history-toggle svg').style.transform=o?'rotate(90deg)':'rotate(0deg)'">
+              <h2 style="display:flex;align-items:center;gap:6px;">Water Level History <span class="history-toggle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span></h2>
               <div class="history-body" style="display:none;">${eventLog}</div>
             </div>
 
