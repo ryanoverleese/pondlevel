@@ -15,19 +15,34 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.request import Request, urlopen
 
 def _need(name: str) -> str:
-    """Read a credential from the environment.
+    """Read a credential from the environment, falling back to ~/.cropx_env.
 
-    These used to sit in the source as string literals, which meant this file
-    could not be committed without publishing a live CropX JWT and a Netlify
-    token. They live in ~/.cropx_env now:
-
-        set -a && . ~/.cropx_env && set +a && python3 pond_server.py
+    The fallback is the whole point. cron does not run a login shell and does
+    not source anything, so a credential that only exists as a shell export is
+    invisible to it. Reading the file directly means the same script works from
+    a terminal, from cron, and from a launchd job without a wrapper line that
+    has to be remembered separately — which is exactly what was forgotten when
+    these tokens moved out of the source and quietly stopped two jobs for four
+    days.
     """
     v = os.environ.get(name)
-    if not v:
-        raise SystemExit(
-            f"{name} is not set. Run:  set -a && . ~/.cropx_env && set +a")
-    return v
+    if v:
+        return v
+    env = os.path.expanduser("~/.cropx_env")
+    try:
+        with open(env) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("export "):
+                    line = line[7:]
+                key, _, val = line.partition("=")
+                if key.strip() == name:
+                    return val.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    raise SystemExit(
+        f"{name} is not set and is not in {env}. Add it there, or run:  "
+        f"set -a && . ~/.cropx_env && set +a")
 
 
 SEED_TOKEN = _need("SEED_TOKEN")
