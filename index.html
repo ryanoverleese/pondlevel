@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Pond Level Monitor — G215091</title>
+  <meta name="description" content="Private pasture pond level monitor." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <style>
@@ -173,6 +179,9 @@
     /* Loading / error */
     .loading { text-align: center; padding: 40px; color: #86868b; }
     .error { color: #ff3b30; font-size: 14px; padding: 16px 0; }
+    .retry-btn { margin-top: 4px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+      border: 1px solid #d2d2d7; border-radius: 8px; background: #fff; cursor: pointer; color: #1d1d1f; }
+    .retry-btn:hover { background: #f5f5f7; }
 
     @media (max-width: 640px) {
       .grid { grid-template-columns: 1fr; }
@@ -206,6 +215,16 @@
   const HOURS = 168;
   const SENSOR_DEPTHS_FROM_TOP = [34, 30, 26, 22, 18, 14, 10, 6, 2];
   const FLOW_RATE_GPM  = 5.1;
+
+  function showLoadError(message) {
+    const app = document.getElementById("app");
+    app.innerHTML = `<div class="card"><div class="error"></div><button type="button" class="retry-btn">Try again</button></div>`;
+    app.querySelector(".error").textContent = message;
+    app.querySelector(".retry-btn").addEventListener("click", () => {
+      app.innerHTML = `<div class="loading">Loading sensor data...</div>`;
+      main();
+    });
+  }
 
   async function getData() {
     const resp = await fetch("./pond_data.json");
@@ -457,7 +476,7 @@
     const outline  = `M ${tL},${bowlTopY} C ${tL+2},${bowlTopY+105} ${bL-8},${bowlBotY-18} ${bL},${bowlBotY} L ${bR},${bowlBotY} C ${bR+8},${bowlBotY-18} ${tR-2},${bowlTopY+105} ${tR},${bowlTopY}`;
 
     const tubeHtml = `
-      <svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="max-width:300px;display:block;margin:0 auto">
+      <svg viewBox="0 0 ${svgW} ${svgH}" width="100%" role="img" focusable="false" aria-label="Pond cross-section, ${curDepth} inches of water" style="max-width:300px;display:block;margin:0 auto">
         <defs><clipPath id="bowl-clip"><path d="${clipPath}"/></clipPath></defs>
         ${curDepth > 0 ? `<rect x="0" y="${waterY.toFixed(1)}" width="${svgW}" height="${svgH}" fill="#bfdbfe" clip-path="url(#bowl-clip)" opacity="0.85"/>` : ''}
         <path d="${outline}" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round"/>
@@ -732,7 +751,7 @@
     const app = document.getElementById("app");
     try {
       const { sensors, history, pump, fetched } = await getData();
-      if (!sensors.length) { app.innerHTML = `<div class="error">No sensor data.</div>`; return; }
+      if (!sensors.length) { showLoadError("No sensor data."); return; }
 
       const sensorTimelines = buildSensorTimelines(sensors);
       const points          = computeWaterDepthTimeline(sensors);
@@ -847,7 +866,7 @@
                 <div class="measure-stat"><div class="measure-stat-val" id="mRate">—</div><div class="measure-stat-lbl">Rate</div></div>
                 <div class="measure-stat"><div class="measure-stat-val" id="mGallons">—</div><div class="measure-stat-lbl">Gallons Pumped</div></div>
               </div>
-              <div class="chart-wrap"><canvas id="chart"></canvas></div>
+              <div class="chart-wrap"><canvas id="chart" aria-label="Water level over the selected time range"></canvas></div>
               <div class="updated">Data as of ${fetchedStr} &nbsp;·&nbsp; Last sensor reading: ${fmtTime(current.ts)} &nbsp;·&nbsp; <a href="" onclick="location.reload();return false;" style="color:#0071e3;text-decoration:none;">↻ Refresh</a></div>
             </div>
 
@@ -1116,7 +1135,7 @@
       renderPumpLock();
 
     } catch (err) {
-      app.innerHTML = `<div class="card"><div class="error">Error: ${err.message}</div></div>`;
+      showLoadError(`Error: ${err.message}`);
     }
   }
 
